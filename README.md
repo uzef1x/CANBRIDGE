@@ -41,14 +41,64 @@ hardware or in a car**. First bring-up must be on a bench (CAN analyzer / replay
 logs), then in-car with the ability to revert to a plain pass-through.
 
 ## Hardware — LilyGo T-2CANFD (ESP32-S3)
-- **CAN-B** = native ESP32-S3 TWAI (TX=GPIO7, RX=GPIO6)
-- **CAN-A** = MCP2518FD over SPI (CS=10, SCLK=12, MOSI=11, MISO=13, INT=8), 20 MHz osc
-- Both Nissan segments: **classic CAN 2.0B @ 500 kbit/s**
-- Wire one bus to the vehicle (VCM) side, the other to the battery (LBC) side. The
-  battery side is auto-detected (from 0x1DB on LEAF / 0x55B on e-NV200); direction is
-  otherwise symmetric.
 
-Pins verified against `Xinyuan-LilyGO/T-2Can → libraries/private_library/pin_config.h`.
+The board has **two galvanically-isolated CAN ports**. The bridge is installed **inline
+in the Nissan EV-CAN bus, between the vehicle and the battery** (dala: *"mounted between
+the battery and vehicle EV-CAN system"*). You cut the EV-CAN bus and connect one segment
+to each port. Both segments are classic **CAN 2.0B @ 500 kbit/s**.
+
+### Wiring diagram
+
+```text
+        Nissan EV-CAN bus (classic CAN 2.0B, 500 kbit/s)
+        ── cut the bus and insert the bridge inline ──
+
+   VEHICLE segment                                  BATTERY segment
+   (VCM, cluster, charger)                          (new pack: LBC / BMS)
+          │  │                                              │  │
+      CANH│  │CANL                                      CANH│  │CANL
+          │  │                                              │  │
+   ┌──────┴──┴──────────────  LilyGo T-2CANFD  ─────────────┴──┴──────┐
+   │                                                                  │
+   │   ┌────────────────────┐              ┌───────────────────────┐  │
+   │   │ CAN-B port (TWAI)  │   ESP32-S3   │ CAN-A port (MCP2518FD)│  │
+   │   │ isolated           │              │ isolated, 20 MHz      │  │
+   │   └────────────────────┘              └───────────────────────┘  │
+   │                                                                  │
+   └───────────────────────────────┬──────────────────────────────────┘
+                                    │
+                 VIN 12–24 V (+) ───┤   ← car switched 12 V accessory
+                 GND (−)         ───┘     (USB-C 5 V = bench/flashing only)
+```
+
+- Connect **each EV-CAN segment to one port**: CANH→CANH, CANL→CANL.
+- It does **not** matter which port faces the vehicle vs the battery — the firmware
+  **auto-detects the battery side** (from 0x1DB on LEAF / 0x55B on e-NV200) and is
+  otherwise a symmetric bidirectional bridge.
+- Read the **CAN-A / CAN-B and CANH / CANL / VIN / GND positions off the board's
+  silkscreen** — don't assume terminal order.
+- Power from the car's **switched 12 V** on `VIN` (board accepts 12–24 V). Use USB-C 5 V
+  only on the bench.
+
+### On-board pinout (reference — already routed on the PCB; you do NOT wire these)
+
+| Function | ESP32-S3 GPIO |
+|---|---|
+| CAN-B (TWAI) TX / RX | GPIO7 / GPIO6 |
+| CAN-A (MCP2518FD) chip-select | GPIO10 |
+| CAN-A SPI SCK / MOSI / MISO | GPIO12 / GPIO11 / GPIO13 |
+| CAN-A interrupt | GPIO8 |
+| MCP2518FD oscillator | 20 MHz |
+
+Verified against `Xinyuan-LilyGO/T-2Can → libraries/private_library/pin_config.h`.
+
+> ⚠️ **The vehicle-side tap is car-specific and safety-critical.** *Where* to cut/tap the
+> EV-CAN — which harness connector and which wires — depends on the model and is
+> documented in dalathegreat's install guides and videos, **not here** (this README does
+> not invent Nissan pinouts). See the
+> [e-NV200](https://github.com/dalathegreat/Nissan-env200-Battery-Upgrade) and
+> [LEAF](https://github.com/dalathegreat/Nissan-LEAF-Battery-Upgrade) install docs.
+> Mis-wiring the EV-CAN can immobilise the car.
 
 ## Selecting the vehicle
 Choice is stored in NVS and read once at boot (never swapped mid-run). Over the serial
