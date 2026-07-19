@@ -30,6 +30,7 @@ Also referenced / thanks to:
 - **NismoBoy34 / Esp32LeafInverterBridge** — the prior ESP32 attempt that prompted this project. Its battery-upgrade translation was never implemented, so the logic here is re-ported directly from dala rather than taken from it.
 - **LilyGo T-2CANFD** board pinout — from [Xinyuan-LilyGO/T-2Can](https://github.com/Xinyuan-LilyGO/T-2Can).
 - **ACAN2517FD** MCP2518FD driver library by Pierre Molinaro.
+- **Longan_CANFD** — https://github.com/Longan-Labs/Longan_CANFD — MCP2518FD library used during development to cross-check controller configuration (e.g. the 20 MHz oscillator setting, via LilyGo's example).
 
 The code comments carry per-handler source line references (e.g. `// L523-736`) so every
 value can be traced back to dala's original file and line.
