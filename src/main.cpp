@@ -9,9 +9,18 @@
 //   (later)       – leaf/env200 translation, Nissan CRC, web-config/OTA
 // ─────────────────────────────────────────────────────────────────────────────
 #include <Arduino.h>
+#include <esp_task_wdt.h>
 #include "bridge.h"
 #include "nissan_crc.h"
 #include "leaf_5bc.h"
+
+// Task watchdog: a hung bridge_task() (e.g. a stuck SPI transaction) would
+// silently drop the battery off the EV-CAN mid-drive — reboot instead; the
+// bridge recovers to a forwarding state on its own. Armed after setup so boot
+// init isn't under the timer; kicked once per loop pass. 2 s is a deliberately
+// generous first value (dala's AVR bridge uses 15 ms) — tighten at bench
+// bring-up once real loop timing is known.
+static constexpr uint32_t WDT_TIMEOUT_S = 2;
 
 // One-time bench sanity check of the ported primitives (0x5BC pack/unpack + CRC-8).
 static void selftest() {
@@ -41,8 +50,11 @@ void setup() {
   delay(300);
   selftest();
   bridge_begin();
+  esp_task_wdt_init(WDT_TIMEOUT_S, true);  // reset chip on expiry
+  esp_task_wdt_add(NULL);                  // watch the loop task
 }
 
 void loop() {
   bridge_task();
+  esp_task_wdt_reset();  // no kick if bridge_task() hangs -> watchdog reboot
 }
