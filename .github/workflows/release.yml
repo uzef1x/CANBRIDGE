@@ -1,0 +1,66 @@
+# Build the firmware and publish a single merged "factory" image that the
+# web installer (docs/index.html, served via GitHub Pages) flashes at 0x0.
+#
+# Trigger: push a tag like v1.2.3 (or run manually with a version label).
+# The image is committed to images/<version>/ on main — the installer page
+# lists that directory via the GitHub tree API.
+name: Build firmware image
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label for the image folder (e.g. v1.2.3)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-image
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build firmware
+        run: pio run -e lilygo-t2canfd
+
+      - name: Merge factory image
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          BUILD=.pio/build/lilygo-t2canfd
+          BOOT_APP0=$(find ~/.platformio/packages/framework-arduinoespressif32 -name boot_app0.bin | head -n1)
+          test -n "$BOOT_APP0"
+          python ~/.platformio/packages/tool-esptoolpy/esptool.py \
+            --chip esp32s3 merge_bin \
+            -o "$RUNNER_TEMP/CANBRIDGE_${VERSION}.factory.bin" \
+            0x0     "$BUILD/bootloader.bin" \
+            0x8000  "$BUILD/partitions.bin" \
+            0xe000  "$BOOT_APP0" \
+            0x10000 "$BUILD/firmware.bin"
+
+      - name: Commit image to main
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+          mkdir -p "images/${VERSION}"
+          cp "$RUNNER_TEMP/CANBRIDGE_${VERSION}.factory.bin" "images/${VERSION}/"
+          git add images
+          git commit -m "CI: firmware image ${VERSION}"
+          git push origin main

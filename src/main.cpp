@@ -33,6 +33,11 @@ static void selftest() {
 
 void setup() {
   Serial.begin(115200);
+#if ARDUINO_USB_CDC_ON_BOOT
+  // Native-USB CDC: never block on writes when no host is attached — a stalled
+  // print in the car (USB unplugged) must not delay CAN forwarding.
+  Serial.setTxTimeoutMs(0);
+#endif
   delay(300);
   selftest();
   bridge_begin();

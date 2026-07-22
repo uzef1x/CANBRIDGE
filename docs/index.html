@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CANBRIDGE Web Installer</title>
+<style>
+html, body, * {
+    font: 18px sans-serif;
+}
+
+body {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+h1 {
+    font-size: 2em;
+    margin: 0.5rem 0 0.5rem;
+}
+
+h2 {
+    font-size: 1.3rem;
+    margin: 2rem 0 1rem;
+}
+
+p, ol {
+    margin: 0 0 1.2rem;
+}
+
+select {
+    display: block;
+    min-width: 20rem;
+    padding: 0.4rem;
+}
+
+button.vehicle {
+    font-size: 1rem;
+    padding: 0.5rem 1.2rem;
+    margin-right: 0.6rem;
+    cursor: pointer;
+}
+
+pre#serial-log {
+    font: 14px monospace;
+    background: #f4f4f4;
+    border: 1px solid #ccc;
+    padding: 0.6rem;
+    min-height: 3rem;
+    white-space: pre-wrap;
+}
+
+.note {
+    font-size: 0.9rem;
+    color: #555;
+}
+</style>
+<script
+  type="module"
+  src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
+></script>
+</head>
+<body>
+
+<h1>CANBRIDGE Web Installer</h1>
+
+<p>Nissan LEAF / e-NV200 battery-upgrade CAN bridge for the
+<b>LilyGo T-2CANFD (ESP32-S3)</b>. This page flashes the firmware over USB
+from a Chrome or Edge browser — no toolchain needed.</p>
+
+<h2>Step 1: Attach the board</h2>
+
+<p>Plug the LilyGo T-2CANFD into your computer with a USB-C cable.
+Power it from USB only while flashing (no 12&nbsp;V on VIN).</p>
+
+<h2>Step 2: Hold BOOT (if needed)</h2>
+
+<p>If the device is not detected in the next step, hold the <b>BOOT</b> button
+while clicking Connect, and release it once erasing/installing starts.</p>
+
+<h2>Step 3: Choose a release</h2>
+
+<p><select id="release"><option value="">Loading releases…</option></select></p>
+
+<div id="install" style="display: none">
+
+<h2>Step 4: Install</h2>
+
+<p>Click the button, pick your board's serial port, and choose
+<b>Install</b>. Select "Erase device" on a first-time install.</p>
+
+<esp-web-install-button></esp-web-install-button>
+
+<h2>Step 5: Select the vehicle</h2>
+
+<p>One firmware serves both cars; the choice is stored on the device and read
+at boot. <b>Close the installer dialog first</b> (it holds the serial port),
+then click:</p>
+
+<p>
+<button class="vehicle" id="btn-leaf">Nissan LEAF</button>
+<button class="vehicle" id="btn-env200">Nissan e-NV200</button>
+</p>
+
+<pre id="serial-log">Device output appears here.</pre>
+
+<p class="note">After the device confirms the choice was stored, press its
+<b>RST</b> button (or unplug/replug) — the selection takes effect on the next
+boot. Default is LEAF.</p>
+
+</div>
+
+<p class="note">Firmware source:
+<a href="https://github.com/uzef1x/CANBRIDGE">github.com/uzef1x/CANBRIDGE</a>
+(GPL-3.0, derived from dalathegreat's battery-upgrade bridges).</p>
+
+<script>
+const REPO = "uzef1x/CANBRIDGE";
+const RAW  = "https://raw.githubusercontent.com/" + REPO + "/main/";
+
+// images/<version>/<name>.factory.bin — one merged image per release
+const image_by_version = {};
+
+const sel = document.getElementById("release");
+fetch("https://api.github.com/repos/" + REPO + "/git/trees/main?recursive=1")
+    .then(r => r.json())
+    .then(r => {
+        (r.tree || []).forEach(t => {
+            const bits = t.path.split("/");
+            if (bits.length === 3 && bits[0] === "images" && bits[2].endsWith(".factory.bin")) {
+                image_by_version[bits[1]] = t.path;
+            }
+        });
+
+        sel.innerHTML = "";
+        const versions = Object.keys(image_by_version).sort((a, b) => {
+            const pa = a.replace(/^v/, "").split(".").map(Number);
+            const pb = b.replace(/^v/, "").split(".").map(Number);
+            for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+                const diff = (pb[i] || 0) - (pa[i] || 0);
+                if (diff !== 0) return diff;
+            }
+            return 0;
+        });
+
+        if (!versions.length) {
+            sel.innerHTML = "<option value=''>No releases published yet</option>";
+            return;
+        }
+
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "Select…";
+        sel.appendChild(opt);
+        versions.forEach(v => {
+            const o = document.createElement("option");
+            o.value = v;
+            o.textContent = v + (v === versions[0] ? "  (latest)" : "");
+            sel.appendChild(o);
+        });
+    })
+    .catch(() => {
+        sel.innerHTML = "<option value=''>Failed to load release list</option>";
+    });
+
+sel.addEventListener("change", () => {
+    const path = image_by_version[sel.value];
+    if (!path) {
+        document.getElementById("install").style.display = "none";
+        return;
+    }
+    const manifest = {
+        "name": "CANBRIDGE",
+        "version": sel.value,
+        "new_install_prompt_erase": true,
+        "builds": [{
+            "chipFamily": "ESP32-S3",
+            "improv": false,
+            "parts": [{ "path": RAW + path, "offset": 0 }]
+        }]
+    };
+    const blob = new Blob([JSON.stringify(manifest)], { type: "application/json" });
+    document.querySelector("esp-web-install-button").manifest = URL.createObjectURL(blob);
+    document.getElementById("install").style.display = "block";
+});
+
+// ── Vehicle selection over Web Serial ───────────────────────────────────────
+let port = null;
+
+async function sendVehicle(cmd) {
+    const log = document.getElementById("serial-log");
+    if (!("serial" in navigator)) {
+        log.textContent = "Web Serial is not supported — use Chrome or Edge.";
+        return;
+    }
+    try {
+        if (!port) {
+            port = await navigator.serial.requestPort();
+            await port.open({ baudRate: 115200 });
+        }
+        const writer = port.writable.getWriter();
+        await writer.write(new TextEncoder().encode(cmd + "\n"));
+        writer.releaseLock();
+        log.textContent = "> " + cmd + "\n";
+
+        // Show the device's reply for a couple of seconds.
+        const reader = port.readable.getReader();
+        const dec = new TextDecoder();
+        const timer = setTimeout(() => reader.cancel().catch(() => {}), 2500);
+        try {
+            for (;;) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                log.textContent += dec.decode(value);
+            }
+        } finally {
+            clearTimeout(timer);
+            reader.releaseLock();
+        }
+        log.textContent += "\n(now press RST or replug the board)";
+    } catch (e) {
+        log.textContent = "Serial error: " + e.message +
+            "\nIf the installer dialog is still open, close it and try again.";
+        try { if (port) await port.close(); } catch (_) {}
+        port = null;
+    }
+}
+
+document.getElementById("btn-leaf").addEventListener("click", () => sendVehicle("leaf"));
+document.getElementById("btn-env200").addEventListener("click", () => sendVehicle("env200"));
+</script>
+
+</body>
+</html>

@@ -131,6 +131,12 @@ the auto-detected battery bus; the block list drops frames via `return false`.
 - dala's software TX FIFO works around an MCP25625 erratum; the MCP2518FD/TWAI drivers
   have their own TX queues and no such erratum.
 
+## Flash from the browser (no toolchain)
+Open **<https://uzef1x.github.io/CANBRIDGE/>** in Chrome or Edge, plug the board in
+over USB-C, pick a release and click Install. The page also selects the vehicle
+(LEAF / e-NV200) over Web Serial after flashing. Images are built by CI on every
+`v*` tag and published to `images/<version>/`.
+
 ## Build / flash (PlatformIO)
 ```
 pio run -e lilygo-t2canfd              # compile
