@@ -24,6 +24,10 @@ Source material (© their respective authors):
 - **Nissan e-NV200 Battery Upgrade** — https://github.com/dalathegreat/Nissan-env200-Battery-Upgrade (**GPL-3.0**). The e-NV200 translation is ported from its `leaf-can-bridge-3-port-env200` firmware.
 - **leaf_can_bus_messages** — https://github.com/dalathegreat/leaf_can_bus_messages (**GPL-3.0**) — CAN signal (DBC) definitions used as reference.
 - **EV-CANlogs** — https://github.com/dalathegreat/EV-CANlogs — real captured CAN logs used for reference/validation.
+- **Battery-Emulator** — https://github.com/dalathegreat/Battery-Emulator (**GPL-3.0**). The
+  dashboard's LeafSpy-style battery diagnostic polling (`src/leaf_diag.*` — 0x79B/0x7BB group
+  requests, cell-voltage/shunt/temperature/identity parsing, the `Temp_fromRAW_to_F()`
+  conversion) is ported from its `Software/src/battery/NISSAN-LEAF-BATTERY.cpp`.
 - dala's bridges were developed together with **Muxsan**'s 3-port CAN-bridge hardware.
 
 Also referenced / thanks to:
@@ -101,6 +105,40 @@ Verified against `Xinyuan-LilyGO/T-2Can → libraries/private_library/pin_config
 > [LEAF](https://github.com/dalathegreat/Nissan-LEAF-Battery-Upgrade) install docs.
 > Mis-wiring the EV-CAN can immobilise the car.
 
+## Web dashboard
+The bridge runs a WiFi soft-AP + live telemetry dashboard, no phone app or toolchain
+needed:
+
+- **Connect to WiFi**: SSID `CANBRIDGE`, password `canbridge123`.
+- **Open** <http://10.0.0.1:8080> in a phone or laptop browser. The explicit `:8080` port stops browsers from silently upgrading the address to HTTPS (which the bridge cannot serve); plain <http://10.0.0.1> also works in browsers that allow http. The AP answers the OS connectivity checks, so phones treat it as a normal network and route to the bridge over WiFi.
+
+Features:
+- Status bar: vehicle (LEAF/e-NV200), car state (Idle/Driving/Charging/Asleep), which
+  bus is the battery, WebSocket connection state, uptime.
+- Battery tiles: SOC, GIDs/kWh, SOH, pack voltage/current/power, temperature,
+  charge/discharge power limits, relay/failsafe status, DTC.
+- Drive tiles: speed (approx), gear, ECO, torque, inverter voltage.
+- Rolling ~60 s sparkline charts for power, SOC, and temperature.
+- **Battery cells** section: polls the LBC the same way a LeafSpy OBD dongle does
+  (0x79B/0x7BB diagnostic groups), one group per ~3 s — all 96 cell voltages,
+  balancing-shunt status, pack temperatures, Hx, insulation resistance, and the
+  battery's part number/serial/BMS ID. Auto-pauses for 60 s whenever a real
+  LeafSpy/OBD tool is seen polling the bus, to avoid two ISO-TP conversations
+  colliding on the same request ID.
+- Frame monitor: live per-ID rate/count/payload tables for both CAN buses.
+- **Custom CAN transmit** panel (battery / vehicle / raw bus A / raw bus B), behind an
+  "Arm transmit" toggle.
+
+  > ⚠️ **Transmitting on a live vehicle bus can trigger faults or unsafe behavior.**
+  > Only use the custom-TX panel when you understand the frame you're sending — this
+  > talks directly to the EV-CAN in a car.
+
+The dashboard is a single embedded page (no filesystem/SD card involved) served
+straight from flash; the telemetry tap (`src/telemetry.*`) only reads frames on the
+bridge's existing forwarding path and never modifies them, and all dashboard-originated
+CAN transmits are queued and sent from the main loop task (`webui_drain_tx()`), never
+from the WiFi/web task — the CAN drivers are not thread-safe.
+
 ## Selecting the vehicle
 Choice is stored in NVS and read once at boot (never swapped mid-run). Over the serial
 monitor (115200) send `leaf` or `env200`, then reboot. Default is LEAF.
@@ -117,6 +155,10 @@ src/leaf_5bc.h            0x5BC model + pack/unpack
 src/leaf_5c0.h            0x5C0 temperature model + pack
 src/leaf_translation.{h,cpp}    full LEAF battery-upgrade translation
 src/env200_translation.{h,cpp}  e-NV200 (24→40 kWh) translation
+src/telemetry.{h,cpp}     read-only decoded-state tap for the web dashboard
+src/leaf_diag.{h,cpp}     LeafSpy-style battery diagnostic polling (0x79B/0x7BB) for the dashboard
+src/webui.{h,cpp}         WiFi soft-AP + async web server/WebSocket + CAN-TX queue
+src/webui_page.h          embedded dashboard HTML/CSS/JS (PROGMEM)
 src/main.cpp              setup() / loop() + boot self-test
 ```
 Design: all battery-upgrade logic lives behind `translate()`; the driver and

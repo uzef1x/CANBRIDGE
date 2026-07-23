@@ -56,6 +56,10 @@ static const uint8_t temp_lut[13] = {25,28,31,34,37,50,63,76,80,82,85,87,90};
 // ── State (dala globals, L8-92) ──────────────────────────────────────────────
 static uint8_t  My_Leaf    = MY_LEAF_AZE0;   // L13 boot AZE0
 static uint8_t  My_Battery = MY_BATTERY_24;  // L8 boot 24kWh
+// UI-only: true once the value above was set from observed traffic rather than
+// the boot assumption. Never read by translation logic.
+static bool     My_Leaf_confirmed    = false;
+static bool     My_Battery_confirmed = false;
 
 static uint8_t  charging_state          = 0;
 static uint8_t  max_charge_80_requested = 0;
@@ -137,8 +141,9 @@ void leaf_tick() {
 bool leaf_translate(BridgeBus from, BridgeFrame &f) {
   switch (f.id) {
 
-    case 0x1ED:  My_Battery = MY_BATTERY_62; break;                       // L285-288
-    case 0x5EB:  if (My_Battery != MY_BATTERY_62) My_Battery = MY_BATTERY_40; break; // L307-317
+    case 0x1ED:  My_Battery = MY_BATTERY_62; My_Battery_confirmed = true; break;  // L285-288
+    case 0x5EB:  if (My_Battery != MY_BATTERY_62) My_Battery = MY_BATTERY_40;
+                 My_Battery_confirmed = true; break;                              // L307-317
 
     case 0x5B9:  // L289-306
       inject(f45E);
@@ -158,12 +163,12 @@ bool leaf_translate(BridgeBus from, BridgeFrame &f) {
       break;
 
     case 0x50A:  // L394-407 : generation detect
-      if (f.dlc == 6)      { My_Leaf = MY_LEAF_ZE0; f.dlc = 8; f.data[6] = 0x04; f.data[7] = 0x00; }
-      else if (f.dlc == 8) { My_Leaf = MY_LEAF_AZE0; }
+      if (f.dlc == 6)      { My_Leaf = MY_LEAF_ZE0; My_Leaf_confirmed = true; f.dlc = 8; f.data[6] = 0x04; f.data[7] = 0x00; }
+      else if (f.dlc == 8) { My_Leaf = MY_LEAF_AZE0; My_Leaf_confirmed = true; }
       break;
 
     case 0x380:  // L408-418
-      if (from != battery_bus) My_Leaf = MY_LEAF_ZE0;  // ZE0 OBC on vehicle side
+      if (from != battery_bus) { My_Leaf = MY_LEAF_ZE0; My_Leaf_confirmed = true; }  // ZE0 OBC on vehicle side
       break;
 
     case 0x50B:  // L419-431
@@ -396,4 +401,20 @@ bool leaf_translate(BridgeBus from, BridgeFrame &f) {
     default: break;
   }
   return true;  // forward (possibly modified) to the other bus
+}
+
+// ── Detection readout (UI only) ──────────────────────────────────────────────
+const char *leaf_detected_vehicle(bool *confirmed) {
+  if (confirmed) *confirmed = My_Leaf_confirmed;
+  return (My_Leaf == MY_LEAF_ZE0) ? "ZE0 (2011-12)" : "AZE0 (2013-17)";
+}
+
+const char *leaf_detected_battery(bool *confirmed) {
+  if (confirmed) *confirmed = My_Battery_confirmed;
+  switch (My_Battery) {
+    case MY_BATTERY_30: return "30 kWh";
+    case MY_BATTERY_40: return "40 kWh";
+    case MY_BATTERY_62: return "62 kWh";
+    default:            return "24 kWh";
+  }
 }

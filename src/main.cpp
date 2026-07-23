@@ -9,18 +9,20 @@
 //   (later)       – leaf/env200 translation, Nissan CRC, web-config/OTA
 // ─────────────────────────────────────────────────────────────────────────────
 #include <Arduino.h>
-#include <esp_task_wdt.h>
 #include "bridge.h"
 #include "nissan_crc.h"
 #include "leaf_5bc.h"
+#include "webui.h"
+#include "vehicle_config.h"
 
-// Task watchdog: a hung bridge_task() (e.g. a stuck SPI transaction) would
-// silently drop the battery off the EV-CAN mid-drive — reboot instead; the
-// bridge recovers to a forwarding state on its own. Armed after setup so boot
-// init isn't under the timer; kicked once per loop pass. 2 s is a deliberately
-// generous first value (dala's AVR bridge uses 15 ms) — tighten at bench
-// bring-up once real loop timing is known.
-static constexpr uint32_t WDT_TIMEOUT_S = 2;
+// Task watchdog (2 s, panic-reboot) is configured, the core-0 IDLE subscription
+// dropped, and the CAN task subscribed — all in bridge_start_can_task() /
+// can_task() (bridge.cpp). The dedicated CAN task is the ONLY watched task: a
+// hung CAN task (e.g. a stuck SPI transaction) would silently drop the battery
+// off the EV-CAN mid-drive, so it must reboot; the Arduino loop task and the
+// web/WiFi core are intentionally NOT watched, so a web-side hang leaves a
+// healthy bridge forwarding instead of rebooting it. 2 s is generous (dala's
+// AVR uses 15 ms) — tighten at bench bring-up once real timing is measured.
 
 // One-time bench sanity check of the ported primitives (0x5BC pack/unpack + CRC-8).
 static void selftest() {
@@ -50,11 +52,23 @@ void setup() {
   delay(300);
   selftest();
   bridge_begin();
-  esp_task_wdt_init(WDT_TIMEOUT_S, true);  // reset chip on expiry
-  esp_task_wdt_add(NULL);                  // watch the loop task
+  // Start CAN forwarding on its own watchdog-monitored task FIRST — from here
+  // frames are pumped continuously regardless of what this task does next.
+  bridge_start_can_task();
+  // Now bring up WiFi/web. This blocks the loop task for ~1 s, but the CAN task
+  // (higher priority, core 1) keeps forwarding throughout — so there is no
+  // CAN-forwarding outage during AP bring-up, on boot or after a reboot.
+  webui_begin();
 }
 
 void loop() {
-  bridge_task();
-  esp_task_wdt_reset();  // no kick if bridge_task() hangs -> watchdog reboot
+  // The Arduino loop task now handles ONLY non-CAN, stall-tolerant work: serial
+  // vehicle selection (rare NVS write) and web housekeeping (pending NVS
+  // settings writes + deferred reboot). All CAN forwarding runs on the dedicated
+  // task created in setup(); nothing here can block it. This task is not
+  // watchdog-monitored on purpose (a hung web side must not reboot a healthy
+  // bridge).
+  vehicle_serial_task();
+  webui_housekeeping();
+  delay(5);  // yield to the CAN task, AsyncTCP, and IDLE (feeds the IDLE WDT)
 }

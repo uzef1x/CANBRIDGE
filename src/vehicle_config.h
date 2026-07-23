@@ -13,5 +13,7 @@ enum Vehicle { VEHICLE_LEAF = 0, VEHICLE_ENV200 = 1 };
 
 void        vehicle_begin(void);        // load persisted choice; call in setup()
 Vehicle     vehicle_active(void);       // the vehicle in effect this session
+Vehicle     vehicle_stored(void);       // persisted choice (differs until reboot)
+void        vehicle_store(Vehicle v);   // persist; applies on next reboot
 const char *vehicle_name(Vehicle v);
 void        vehicle_serial_task(void);  // poll Serial for "leaf" / "env200"
