@@ -91,7 +91,7 @@ input[readonly]{opacity:.8}
   <span class="pill" title="Connection between this page and the bridge over WiFi">Link: <span class="dot" id="dotWs"></span><b id="wsState">connecting</b></span>
   <span class="pill" title="Which vehicle translation the bridge runs. Change in Settings below (applies after reboot)">Profile: <b id="profActive">-</b></span>
   <span class="pill" title="Green = CAN frames are arriving at the bridge right now">CAN traffic: <span class="dot" id="dotVeh"></span><b id="canLive">none</b></span>
-  <span class="pill" title="Firmware version this board is running (git tag of the build)">FW: <b id="fw">-</b></span>
+  <span class="pill" title="Firmware version this board is running">FW: <b id="fw">-</b></span>
   <span class="pill" title="Time since the bridge last booted">Up: <span id="uptime">0s</span></span>
   <span class="pill" title="Bridge free RAM">Mem: <span id="heap">-</span></span>
 </div>
