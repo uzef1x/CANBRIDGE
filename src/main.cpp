@@ -14,6 +14,7 @@
 #include "leaf_5bc.h"
 #include "webui.h"
 #include "vehicle_config.h"
+#include "fw_version.h"
 
 // Task watchdog (2 s, panic-reboot) is configured, the core-0 IDLE subscription
 // dropped, and the CAN task subscribed — all in bridge_start_can_task() /
@@ -50,6 +51,7 @@ void setup() {
   Serial.setTxTimeoutMs(0);
 #endif
   delay(300);
+  Serial.printf("[boot] CANBRIDGE firmware %s\n", FW_VERSION);
   selftest();
   bridge_begin();
   // Start CAN forwarding on its own watchdog-monitored task FIRST — from here
