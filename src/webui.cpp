@@ -14,6 +14,7 @@
 #include "vehicle_config.h"
 #include "leaf_translation.h"
 #include "ap_config.h"
+#include "fw_version.h"
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
@@ -295,7 +296,8 @@ static void build_snapshot(char *buf, size_t buflen) {
       snprintf(detected, sizeof(detected), "%s", batt);
   }  // e-NV200 profile: fixed 24->40 kWh translation, nothing is auto-detected
   int n = snprintf(buf, buflen,
-    "{\"vehicle\":\"%s\",\"uptime_ms\":%lu,\"free_heap\":%lu,"
+    "{\"fw\":\"" FW_VERSION "\","
+    "\"vehicle\":\"%s\",\"uptime_ms\":%lu,\"free_heap\":%lu,"
     "\"profile_stored\":\"%s\",\"detected\":\"%s\",\"write_safe\":%d,"
     "\"can_rx_age_ms\":%ld,"
     "\"battery_bus\":%ld,\"last_battery_frame_ms\":%lu,"

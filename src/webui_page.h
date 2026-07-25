@@ -91,6 +91,7 @@ input[readonly]{opacity:.8}
   <span class="pill" title="Connection between this page and the bridge over WiFi">Link: <span class="dot" id="dotWs"></span><b id="wsState">connecting</b></span>
   <span class="pill" title="Which vehicle translation the bridge runs. Change in Settings below (applies after reboot)">Profile: <b id="profActive">-</b></span>
   <span class="pill" title="Green = CAN frames are arriving at the bridge right now">CAN traffic: <span class="dot" id="dotVeh"></span><b id="canLive">none</b></span>
+  <span class="pill" title="Firmware version this board is running (git tag of the build)">FW: <b id="fw">-</b></span>
   <span class="pill" title="Time since the bridge last booted">Up: <span id="uptime">0s</span></span>
   <span class="pill" title="Bridge free RAM">Mem: <span id="heap">-</span></span>
 </div>
@@ -287,6 +288,7 @@ function render(d){
   }
   $('state').textContent=stateTxt;
   $('battBusNote').textContent = d.battery_bus<0?'':('— wired to bridge port '+(d.battery_bus===0?'A':'B'));
+  $('fw').textContent=d.fw||'-';
   $('uptime').textContent=Math.floor(d.uptime_ms/1000)+'s';
   $('heap').textContent=(d.free_heap/1024).toFixed(1)+'KB';
 
@@ -563,7 +565,7 @@ if(DEMO){
     var pkw=drive*40+Math.sin(t*1.3)*6;
     var soc=87-(t/60)%5;
     var v=360-drive*8;
-    render({vehicle:'LEAF',profile_stored:'LEAF',uptime_ms:t*1000,free_heap:220000,battery_bus:1,can_rx_age_ms:50,write_safe:1,
+    render({fw:'demo',vehicle:'LEAF',profile_stored:'LEAF',uptime_ms:t*1000,free_heap:220000,battery_bus:1,can_rx_age_ms:50,write_safe:1,
       detected:'AZE0 (2013-17) · 40 kWh',
       soc_tenth_pct:soc*10,usable_soc_pct:Math.round(soc),gids:Math.round(soc*4.9),soh_pct:91,
       pack_voltage_v:v,pack_current_a:pkw*1000/v,pack_power_kw:pkw,
