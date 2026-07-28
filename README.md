@@ -62,28 +62,76 @@ to each port. Both segments are classic **CAN 2.0B @ 500 kbit/s**.
    (VCM, cluster, charger)                          (new pack: LBC / BMS)
           │  │                                              │  │
       CANH│  │CANL                                      CANH│  │CANL
+     (L = │  │ (G =                                    (L = │  │ (G =
+     blue)│  │green)*                                  blue)│  │green)*
           │  │                                              │  │
-   ┌──────┴──┴──────────────  LilyGo T-2CANFD  ─────────────┴──┴──────┐
-   │                                                                  │
+        pin 2  pin 3                                     pin 2  pin 3
+   ┌──────┴──┴───── LilyGo T-2CANFD — the two GREEN ────────┴──┴──────┐
+   │              4-pin 3.81 mm terminal blocks (P1 / P2)             │
    │   ┌────────────────────┐              ┌───────────────────────┐  │
-   │   │ CAN-B port (TWAI)  │   ESP32-S3   │ CAN-A port (MCP2518FD)│  │
+   │   │ P1: CAN-B (TWAI)   │   ESP32-S3   │ P2: CAN-A (MCP2518FD) │  │
    │   │ isolated           │              │ isolated, 20 MHz      │  │
    │   └────────────────────┘              └───────────────────────┘  │
    │                                                                  │
    └───────────────────────────────┬──────────────────────────────────┘
                                     │
+       2-pin 5.08 mm terminal:      │
                  VIN 12–24 V (+) ───┤   ← car switched 12 V accessory
                  GND (−)         ───┘     (USB-C 5 V = bench/flashing only)
+
+   * Nissan LEAF harness color codes at the VCM — see the wire-color note below.
 ```
 
+### Which connectors? (the board edge has several — only three are used)
+
+Pinouts below are read from LilyGo's schematic
+([`project/T-2Can-Fd_V1.0.pdf`](https://github.com/Xinyuan-LilyGO/T-2Can/blob/main/project/T-2Can-Fd_V1.0.pdf),
+a copy is in `docs/lora/T-2Can-Fd_V1.0_schematic.pdf`):
+
+| Connector | Type | Used for | Pinout (schematic) |
+|---|---|---|---|
+| **P1** | green 4-pin 3.81 mm terminal (WJ15EDGVC-3.81-4P) | **CAN-B port (TWAI)** — one EV-CAN segment | 1 = DGND (isolated CAN ground), **2 = CANH**, **3 = CANL**, 4 = SGND (shield) |
+| **P2** | green 4-pin 3.81 mm terminal (WJ15EDGVC-3.81-4P) | **CAN-A port (MCP2518FD)** — the other EV-CAN segment | same: 1 = DGND, **2 = CANH**, **3 = CANL**, 4 = SGND |
+| — | 2-pin 5.08 mm terminal (WJ500V-5.08-2P) | **Power in** | 1 = GND, 2 = VIN 12–24 V |
+| CNC1 | small white JST-SH 1.0 mm 4-pin | **not CAN** — 3.3 V UART expansion | 1 = GND, 2 = 3V3, 3 = TX, 4 = RX |
+| CNC2 | small white JST-SH 1.0 mm 4-pin | **not CAN** — spare GPIO (IO1/IO2) | 1 = GND, 2 = 3V3, 3 = IO1, 4 = IO2 |
+| USB-C | — | flashing + bench power only | — |
+
+- Only the EV-CAN pair carries the bus: **connect CANH and CANL to pins 2 and 3** of
+  each green terminal. Pins 1/4 are the isolated-side ground and the shield
+  termination (SGND couples to DGND through 1 nF/2 kV ‖ 1 MΩ on the board); the
+  plain Nissan twisted pair needs neither.
+- The two small white JST-SH connectors are **not CAN ports** — leave them empty.
 - Connect **each EV-CAN segment to one port**: CANH→CANH, CANL→CANL.
 - It does **not** matter which port faces the vehicle vs the battery — the firmware
   **auto-detects the battery side** (from 0x1DB on LEAF / 0x55B on e-NV200) and is
   otherwise a symmetric bidirectional bridge.
-- Read the **CAN-A / CAN-B and CANH / CANL / VIN / GND positions off the board's
-  silkscreen** — don't assume terminal order.
+- Cross-check the **silkscreen** against the table before wiring — pin-1 position on
+  the physical terminal block isn't visible in the schematic.
 - Power from the car's **switched 12 V** on `VIN` (board accepts 12–24 V). Use USB-C 5 V
   only on the bench.
+
+### EV-CAN wire colors (Nissan side)
+
+From the 2015 Nissan LEAF service manual (pub. SM15EA0ZE0U0, North American market),
+ECU "Terminal No. (Wire color)" tables:
+
+| ECU | EV-CAN H | EV-CAN L |
+|---|---|---|
+| VCM (terminals 24/25) | **L** | **G** |
+| Traction motor inverter (14/15) | **L** | **G** |
+| A/C auto amp (28/29) | **L** | **G** |
+| PDM / charger (27/11) | **W** | **L** |
+
+In Nissan's wire-color code, `L` = blue and `G` = green (the code letters are as
+printed in the manual; the letter→color mapping is the standard Nissan convention —
+this PDF copy is missing its legend page). So at the usual tap points the EV-CAN
+pair is a **blue (CAN-H) / green (CAN-L)** twisted pair — but note the PDM row
+above: **colors are not uniform on every branch of the harness**, and this source
+is a 2015 US-market manual, not an EU one. No documented e-NV200 EV-CAN colors were
+found. **Never identify the pair by color alone** — confirm electrically first
+(≈2.5 V idle / 60 Ω differential across a terminated pair with the pack connected,
+or a scope) before cutting anything.
 
 ### On-board pinout (reference — already routed on the PCB; you do NOT wire these)
 
