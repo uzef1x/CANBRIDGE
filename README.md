@@ -82,6 +82,24 @@ to each port. Both segments are classic **CAN 2.0B @ 500 kbit/s**.
    * Nissan LEAF harness color codes at the VCM — see the wire-color note below.
 ```
 
+Photos of the actual board (T_2CAN_FD V1.0):
+
+**Underside — every CAN screw is named next to its solder pad.** Wire by these
+printed labels, not by position. One block is port A
+(`DGNDA · CANHA · CANLA · SGNDA`), the other port B
+(`DGNDB · CANHB · CANLB · SGNDB`); which one faces vehicle vs battery doesn't
+matter — the firmware auto-detects.
+
+![T-2CANFD underside with per-pin CAN labels](docs/hardware/t2canfd_bottom_can_labels.jpg)
+
+**Top — the two black 4-pin screw blocks (top edge) are the CAN ports.** At the
+opposite end: USB-C (bench/flashing), the two small JST sockets (UART/GPIO — not
+CAN, leave empty), the `12–24V` power screw terminal with `GND` marked beside it,
+and a 2-position DIP switch (not in the vendor schematic — function unverified,
+leave as shipped).
+
+![T-2CANFD top side](docs/hardware/t2canfd_top.jpg)
+
 ### Which connectors? (the board edge has several — only three are used)
 
 Pinouts below are read from LilyGo's schematic
@@ -90,8 +108,8 @@ a copy is in `docs/lora/T-2Can-Fd_V1.0_schematic.pdf`):
 
 | Connector | Type | Used for | Pinout (schematic) |
 |---|---|---|---|
-| **P1** | green 4-pin 3.81 mm terminal (WJ15EDGVC-3.81-4P) | **CAN-B port (TWAI)** — one EV-CAN segment | 1 = DGND (isolated CAN ground), **2 = CANH**, **3 = CANL**, 4 = SGND (shield) |
-| **P2** | green 4-pin 3.81 mm terminal (WJ15EDGVC-3.81-4P) | **CAN-A port (MCP2518FD)** — the other EV-CAN segment | same: 1 = DGND, **2 = CANH**, **3 = CANL**, 4 = SGND |
+| **P1** | black 4-pin 3.81 mm screw terminal (WJ15EDGVC-3.81-4P) | **CAN-B port (TWAI)** — one EV-CAN segment | `DGNDB · CANHB · CANLB · SGNDB` — per-pin labels on the board's underside |
+| **P2** | black 4-pin 3.81 mm screw terminal (WJ15EDGVC-3.81-4P) | **CAN-A port (MCP2518FD)** — the other EV-CAN segment | `DGNDA · CANHA · CANLA · SGNDA` — per-pin labels on the board's underside |
 | — | 2-pin 5.08 mm terminal (WJ500V-5.08-2P) | **Power in** | 1 = GND, 2 = VIN 12–24 V |
 | CNC1 | small white JST-SH 1.0 mm 4-pin | **not CAN** — 3.3 V UART expansion | 1 = GND, 2 = 3V3, 3 = TX, 4 = RX |
 | CNC2 | small white JST-SH 1.0 mm 4-pin | **not CAN** — spare GPIO (IO1/IO2) | 1 = GND, 2 = 3V3, 3 = IO1, 4 = IO2 |
@@ -106,8 +124,8 @@ a copy is in `docs/lora/T-2Can-Fd_V1.0_schematic.pdf`):
 - It does **not** matter which port faces the vehicle vs the battery — the firmware
   **auto-detects the battery side** (from 0x1DB on LEAF / 0x55B on e-NV200) and is
   otherwise a symmetric bidirectional bridge.
-- Cross-check the **silkscreen** against the table before wiring — pin-1 position on
-  the physical terminal block isn't visible in the schematic.
+- No pin-counting needed: **each screw's net name is printed on the board's
+  underside** next to its solder pad — wire by those labels.
 - Power from the car's **switched 12 V** on `VIN` (board accepts 12–24 V). Use USB-C 5 V
   only on the bench.
 
@@ -141,7 +159,7 @@ or a scope) before cutting anything.
 | CAN-A (MCP2518FD) chip-select | GPIO10 |
 | CAN-A SPI SCK / MOSI / MISO | GPIO12 / GPIO11 / GPIO13 |
 | CAN-A interrupt | GPIO8 |
-| MCP2518FD oscillator | 20 MHz |
+| MCP2518FD oscillator | 20 MHz per LilyGo's example code — but the schematic prints a 40 MHz crystal; **confirm at first bench CAN test** (wrong setting = half/double bit rate) |
 
 Verified against `Xinyuan-LilyGO/T-2Can → libraries/private_library/pin_config.h`.
 
