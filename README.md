@@ -1,5 +1,30 @@
 # Nissan LEAF / e-NV200 battery-upgrade CAN bridge (ESP32)
 
+## ⚠️ Disclaimer — use entirely at your own risk
+
+**Everything you do with this project is on you.** By downloading, building, flashing,
+installing, wiring, or using anything in this repository — software, documentation,
+wiring information, or images — you accept **full and sole responsibility** for the
+consequences. The author and contributors accept **no responsibility and no liability
+whatsoever** for any damage, loss, cost, or injury of any kind, including but not
+limited to: damage to your vehicle, its battery, its electronics, or other property;
+a vehicle that will not drive, charge, or start; stored fault codes; fire; personal
+injury; or loss of warranty, insurance cover, or road-worthiness/type approval —
+whether arising from the software, the documentation, your installation, or errors
+in any of them.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE, AND NONINFRINGEMENT. Sections 15 ("Disclaimer of Warranty") and
+16 ("Limitation of Liability") of the [GPL-3.0 license](LICENSE) apply to this entire
+project. If you do not agree, do not use it.
+
+This controls a real vehicle. It has been **compile-verified** and the translation was
+**independently cross-checked against dala's source**, but it has **not been tested on
+hardware or in a car**. First bring-up must be on a bench (CAN analyzer / replayed
+logs), then in-car with the ability to revert to a plain pass-through. Modifying a
+vehicle's CAN bus can immobilise the car.
+
 A clean ESP32 reimplementation of dalathegreat's battery-upgrade CAN bridge — the
 job the Muxsan 3-port and STM32 2-port bridges do — for **both** the Nissan LEAF and
 the e-NV200, in one binary, selectable at runtime. It sits between the car's VCM and
@@ -10,40 +35,6 @@ battery-upgrade CAN bridges** — see [Credits & attribution](#credits--attribut
 All of the CAN translation logic comes from dala's work, with per-line source
 references in the code comments; none of the underlying reverse-engineering
 originates here.
-
-## Credits & attribution
-
-This project **ports / adapts the work of [dalathegreat](https://github.com/dalathegreat)**
-(and contributors) to the ESP32. The hard part — reverse-engineering the Nissan battery
-CAN protocol (message IDs, byte layouts, bit masks, checksums, GID/capacity spoofing,
-DTC-clearing frames, generation/battery auto-detection) — is **theirs**, not ours. This
-repo only re-implements that logic on new hardware.
-
-Source material (© their respective authors):
-- **Nissan LEAF Battery Upgrade** — https://github.com/dalathegreat/Nissan-LEAF-Battery-Upgrade (**GPL-3.0**). The LEAF translation here is ported from its `Software/CANBRIDGE-3port/leaf-can-bridge-3-port` firmware.
-- **Nissan e-NV200 Battery Upgrade** — https://github.com/dalathegreat/Nissan-env200-Battery-Upgrade (**GPL-3.0**). The e-NV200 translation is ported from its `leaf-can-bridge-3-port-env200` firmware.
-- **leaf_can_bus_messages** — https://github.com/dalathegreat/leaf_can_bus_messages (**GPL-3.0**) — CAN signal (DBC) definitions used as reference.
-- **EV-CANlogs** — https://github.com/dalathegreat/EV-CANlogs — real captured CAN logs used for reference/validation.
-- **Battery-Emulator** — https://github.com/dalathegreat/Battery-Emulator (**GPL-3.0**). The
-  dashboard's LeafSpy-style battery diagnostic polling (`src/leaf_diag.*` — 0x79B/0x7BB group
-  requests, cell-voltage/shunt/temperature/identity parsing, the `Temp_fromRAW_to_F()`
-  conversion) is ported from its `Software/src/battery/NISSAN-LEAF-BATTERY.cpp`.
-- dala's bridges were developed together with **Muxsan**'s 3-port CAN-bridge hardware.
-
-Also referenced / thanks to:
-- **NismoBoy34 / Esp32LeafInverterBridge** — the prior ESP32 attempt that prompted this project. Its battery-upgrade translation was never implemented, so the logic here is re-ported directly from dala rather than taken from it.
-- **LilyGo T-2CANFD** board pinout — from [Xinyuan-LilyGO/T-2Can](https://github.com/Xinyuan-LilyGO/T-2Can).
-- **ACAN2517FD** MCP2518FD driver library by Pierre Molinaro.
-- **Longan_CANFD** — https://github.com/Longan-Labs/Longan_CANFD — MCP2518FD library used during development to cross-check controller configuration (e.g. the 20 MHz oscillator setting, via LilyGo's example).
-
-The code comments carry per-handler source line references (e.g. `// L523-736`) so every
-value can be traced back to dala's original file and line.
-
-## ⚠️ Safety
-This controls a real vehicle. It has been **compile-verified** and the translation was
-**independently cross-checked against dala's source**, but it has **not been tested on
-hardware or in a car**. First bring-up must be on a bench (CAN analyzer / replayed
-logs), then in-car with the ability to revert to a plain pass-through.
 
 ## Hardware — LilyGo T-2CANFD (ESP32-S3)
 
@@ -194,10 +185,38 @@ pio device monitor -b 115200           # boot log, self-test, A->B / B->A counte
 ```
 Plain Arduino C++ — also builds in the Arduino IDE (ESP32-S3 board + ACAN2517FD lib).
 
-## License
+## License & credits
 
 This project is a derivative work of dalathegreat's **GPL-3.0** battery-upgrade bridges,
 so it is released under the **GNU General Public License v3.0** — see [LICENSE](LICENSE).
-If you use, modify, or distribute it, you must preserve the attribution above and keep it
+If you use, modify, or distribute it, you must preserve the attribution below and keep it
 GPL-3.0. This is required by dala's license and is the right thing to do — the credit for
 this work belongs with them.
+
+### Credits & attribution
+
+This project **ports / adapts the work of [dalathegreat](https://github.com/dalathegreat)**
+(and contributors) to the ESP32. The hard part — reverse-engineering the Nissan battery
+CAN protocol (message IDs, byte layouts, bit masks, checksums, GID/capacity spoofing,
+DTC-clearing frames, generation/battery auto-detection) — is **theirs**, not ours. This
+repo only re-implements that logic on new hardware.
+
+Source material (© their respective authors):
+- **Nissan LEAF Battery Upgrade** — https://github.com/dalathegreat/Nissan-LEAF-Battery-Upgrade (**GPL-3.0**). The LEAF translation here is ported from its `Software/CANBRIDGE-3port/leaf-can-bridge-3-port` firmware.
+- **Nissan e-NV200 Battery Upgrade** — https://github.com/dalathegreat/Nissan-env200-Battery-Upgrade (**GPL-3.0**). The e-NV200 translation is ported from its `leaf-can-bridge-3-port-env200` firmware.
+- **leaf_can_bus_messages** — https://github.com/dalathegreat/leaf_can_bus_messages (**GPL-3.0**) — CAN signal (DBC) definitions used as reference.
+- **EV-CANlogs** — https://github.com/dalathegreat/EV-CANlogs — real captured CAN logs used for reference/validation.
+- **Battery-Emulator** — https://github.com/dalathegreat/Battery-Emulator (**GPL-3.0**). The
+  dashboard's LeafSpy-style battery diagnostic polling (`src/leaf_diag.*` — 0x79B/0x7BB group
+  requests, cell-voltage/shunt/temperature/identity parsing, the `Temp_fromRAW_to_F()`
+  conversion) is ported from its `Software/src/battery/NISSAN-LEAF-BATTERY.cpp`.
+- dala's bridges were developed together with **Muxsan**'s 3-port CAN-bridge hardware.
+
+Also referenced / thanks to:
+- **NismoBoy34 / Esp32LeafInverterBridge** — the prior ESP32 attempt that prompted this project. Its battery-upgrade translation was never implemented, so the logic here is re-ported directly from dala rather than taken from it.
+- **LilyGo T-2CANFD** board pinout — from [Xinyuan-LilyGO/T-2Can](https://github.com/Xinyuan-LilyGO/T-2Can).
+- **ACAN2517FD** MCP2518FD driver library by Pierre Molinaro.
+- **Longan_CANFD** — https://github.com/Longan-Labs/Longan_CANFD — MCP2518FD library used during development to cross-check controller configuration (e.g. the 20 MHz oscillator setting, via LilyGo's example).
+
+The code comments carry per-handler source line references (e.g. `// L523-736`) so every
+value can be traced back to dala's original file and line.
