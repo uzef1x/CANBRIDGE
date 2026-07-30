@@ -136,14 +136,15 @@ static void handle_cmd_reboot(AsyncWebSocketClient *client) {
   ws_ack(client, "rebooting");
 }
 
-// Handle {"cmd":"setprofile","value":"leaf"|"env200"} — stash for the main loop.
+// Handle {"cmd":"setprofile","value":"leaf"|"env200"|"monitor"} — stash for the main loop.
 static void handle_cmd_setprofile(AsyncWebSocketClient *client, JsonDocument &doc) {
   if (!car_write_safe()) { ws_err(client, "locked: car must be parked"); return; }
   const char *value = doc["value"] | "";
   Vehicle v;
-  if      (!strcmp(value, "leaf"))   v = VEHICLE_LEAF;
-  else if (!strcmp(value, "env200")) v = VEHICLE_ENV200;
-  else { ws_err(client, "value must be leaf|env200"); return; }
+  if      (!strcmp(value, "leaf"))    v = VEHICLE_LEAF;
+  else if (!strcmp(value, "env200"))  v = VEHICLE_ENV200;
+  else if (!strcmp(value, "monitor")) v = VEHICLE_MONITOR;
+  else { ws_err(client, "value must be leaf|env200|monitor"); return; }
   // Reject while a prior profile change is still pending (not yet drained by the
   // loop task) so a second request can't be lost in the drain window.
   if (g_pending_profile >= 0) { ws_err(client, "busy, retry in a moment"); return; }
@@ -216,9 +217,7 @@ void webui_begin() {
   ws.onEvent(onWsEvent);
   server.addHandler(&ws);
 
-  // Bench-debug request log (runs in the AsyncTCP task; low volume, USB only).
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *req) {
-    Serial.printf("[http] GET / from %s\n", req->client()->remoteIP().toString().c_str());
     req->send(200, "text/html", PAGE_HTML);
   });
 
@@ -227,12 +226,10 @@ void webui_begin() {
   // route usable and a normal browser can reach 10.0.0.1. (The phone will show
   // "no internet" only if it re-probes something we don't cover.)
   server.on("/generate_204", HTTP_GET, [](AsyncWebServerRequest *req) {                     // Android
-    Serial.println("[http] android probe -> 204");
     req->send(204);
   });
   server.on("/gen_204", HTTP_GET, [](AsyncWebServerRequest *req) { req->send(204); });      // Android alt
   auto apple_ok = [](AsyncWebServerRequest *req) {                                          // iOS/macOS
-    Serial.println("[http] apple probe -> Success");
     req->send(200, "text/html", "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>");
   };
   server.on("/hotspot-detect.html", HTTP_GET, apple_ok);
@@ -249,15 +246,12 @@ void webui_begin() {
 
   // Catch-all for anything else: redirect to the dashboard.
   server.onNotFound([](AsyncWebServerRequest *req) {
-    Serial.printf("[http] %s %s from %s -> redirect\n", req->methodToString(),
-                  req->url().c_str(), req->client()->remoteIP().toString().c_str());
     req->redirect("http://10.0.0.1/");
   });
 
   // Same dashboard + WebSocket on :8080 (see note at the server8080 definition).
   server8080.addHandler(&ws);
   server8080.on("/", HTTP_GET, [](AsyncWebServerRequest *req) {
-    Serial.printf("[http] GET :8080/ from %s\n", req->client()->remoteIP().toString().c_str());
     req->send(200, "text/html", PAGE_HTML);
   });
   server8080.onNotFound([](AsyncWebServerRequest *req) {
@@ -281,10 +275,16 @@ static void build_snapshot(char *buf, size_t buflen) {
   // the ABSENCE of the 40/62 marker frames, so that counts as confirmed only
   // after the battery has been live for a while.
   char detected[48] = "-";
-  if (vehicle_active() == VEHICLE_LEAF) {
+  if (vehicle_active() == VEHICLE_LEAF || vehicle_active() == VEHICLE_MONITOR) {
+    // LEAF: leaf_translate() sets this state as it runs. Monitor: leaf_observe()
+    // sets the same state from a read-only tap (bridge.cpp) since no translation
+    // runs — same getters, same chip either way.
     bool veh_ok = false, batt_ok = false;
     const char *veh  = leaf_detected_vehicle(&veh_ok);
     const char *batt = leaf_detected_battery(&batt_ok);
+    // Monitor may be watching an e-NV200, where LEAF generation labels (ZE0/AZE0)
+    // don't apply — show only the battery there, never the generation.
+    if (vehicle_active() == VEHICLE_MONITOR) veh_ok = false;
     const uint32_t first = g_telemetry.first_battery_frame_ms;
     const bool batt_by_absence = !batt_ok && first && (millis() - first > 5000);
     if (batt_by_absence) batt = "24/30 kWh";
@@ -294,7 +294,7 @@ static void build_snapshot(char *buf, size_t buflen) {
       snprintf(detected, sizeof(detected), "%s", veh);
     else if (batt_ok || batt_by_absence)
       snprintf(detected, sizeof(detected), "%s", batt);
-  }  // e-NV200 profile: fixed 24->40 kWh translation, nothing is auto-detected
+  }  // e-NV200 profile: no auto-detect (fixed translation), nothing shown
   int n = snprintf(buf, buflen,
     "{\"fw\":\"" FW_VERSION "\","
     "\"vehicle\":\"%s\",\"uptime_ms\":%lu,\"free_heap\":%lu,"
@@ -387,8 +387,6 @@ static void build_cells_message(char *buf, size_t buflen) {
     (unsigned long)age_s, paused);
 }
 
-static uint32_t g_last_client_report_ms = 0;
-
 // Drain pending settings requests stashed by the AsyncTCP task. Main loop
 // task ONLY — this is where NVS writes actually happen (Part B #3).
 static void drain_pending_settings() {
@@ -412,12 +410,6 @@ void webui_broadcast() {
   g_dns.processNextRequest();  // cheap UDP poll; must run every pass, not at 250 ms
 
   const uint32_t now = millis();
-
-  if (now - g_last_client_report_ms >= 5000) {
-    g_last_client_report_ms = now;
-    Serial.printf("[webui] wifi clients: %d, ws clients: %u\n",
-                  WiFi.softAPgetStationNum(), (unsigned)ws.count());
-  }
 
   if (ws.count() != 0) {
     static uint32_t last_sent_cells_gen = 0, last_sent_shunts_gen = 0;

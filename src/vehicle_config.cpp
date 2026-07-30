@@ -1,21 +1,26 @@
 #include "vehicle_config.h"
+#include "telemetry.h"
 #include <Arduino.h>
 #include <Preferences.h>
 
 static Preferences prefs;
-static Vehicle     g_active = VEHICLE_LEAF;   // in effect this session (set at boot)
-static Vehicle     g_stored = VEHICLE_LEAF;   // persisted choice (may differ until reboot)
+static Vehicle     g_active = VEHICLE_MONITOR;   // in effect this session (set at boot)
+static Vehicle     g_stored = VEHICLE_MONITOR;   // persisted choice (may differ until reboot)
 
 const char *vehicle_name(Vehicle v) {
-  return (v == VEHICLE_ENV200) ? "e-NV200" : "LEAF";
+  if (v == VEHICLE_ENV200)  return "e-NV200";
+  if (v == VEHICLE_MONITOR) return "Monitor";
+  return "LEAF";
 }
 
 void vehicle_begin(void) {
   prefs.begin("bridge", false);
-  uint8_t stored = prefs.getUChar("vehicle", VEHICLE_LEAF);
-  g_active = (stored == VEHICLE_ENV200) ? VEHICLE_ENV200 : VEHICLE_LEAF;
+  uint8_t stored = prefs.getUChar("vehicle", VEHICLE_MONITOR);
+  if      (stored == VEHICLE_ENV200)  g_active = VEHICLE_ENV200;
+  else if (stored == VEHICLE_LEAF)    g_active = VEHICLE_LEAF;
+  else                                g_active = VEHICLE_MONITOR;
   g_stored = g_active;
-  Serial.printf("[vehicle] active: %s  (send 'leaf' or 'env200' to change, then reboot)\n",
+  Serial.printf("[vehicle] active: %s  (send 'leaf', 'env200' or 'monitor' to change, then reboot)\n",
                 vehicle_name(g_active));
 }
 
@@ -41,9 +46,12 @@ void vehicle_serial_task(void) {
     char c = (char)Serial.read();
     if (c == '\n' || c == '\r') {
       buf.trim(); buf.toLowerCase();
-      if      (buf == "leaf")   vehicle_store(VEHICLE_LEAF);
-      else if (buf == "env200") vehicle_store(VEHICLE_ENV200);
-      else if (buf.length())    Serial.println("[vehicle] unknown; send 'leaf' or 'env200'");
+      bool known = (buf == "leaf") || (buf == "env200") || (buf == "monitor");
+      if      (known && !car_write_safe()) Serial.println("[vehicle] locked: car must be parked (or CAN silent)");
+      else if (buf == "leaf")    vehicle_store(VEHICLE_LEAF);
+      else if (buf == "env200")  vehicle_store(VEHICLE_ENV200);
+      else if (buf == "monitor") vehicle_store(VEHICLE_MONITOR);
+      else if (buf.length())     Serial.println("[vehicle] unknown; send 'leaf', 'env200' or 'monitor'");
       buf = "";
     } else if (buf.length() < 16) {
       buf += c;

@@ -132,8 +132,10 @@ since the CAN drivers are not thread-safe.
 ## Selecting the vehicle
 
 Choice is stored in NVS and read once at boot (never swapped mid-run). Over the serial
-monitor (115200) send `leaf` or `env200`, then reboot. Default is LEAF. The profile can
-also be changed from the web dashboard's Profile dropdown; reboot to apply.
+monitor (115200) send `leaf`, `env200` or `monitor`, then reboot. The default is Monitor
+— safe pass-through with no frame modification — until you deliberately pick LEAF or
+e-NV200. The profile can also be changed from the web dashboard's Profile dropdown;
+reboot to apply.
 
 What each profile covers:
 
@@ -143,23 +145,15 @@ What each profile covers:
 - **e-NV200** — only one option: the van only ever shipped with 24 or 40 kWh,
   so the bridge does the **24 → 40 kWh upgrade** only. Nothing is auto-detected;
   the translation is fixed for that swap.
+- **Monitor** — pure pass-through for an unmodified LEAF or e-NV200: no frames
+  are changed or injected, but the dashboard and LeafSpy-style cell polling
+  stay fully live.
 
-## Flash from the browser (no toolchain)
+## Flash from a web browser
 
 Open **<https://uzef1x.github.io/CANBRIDGE/>** in Chrome or Edge, plug the board in
 over USB-C, pick a release and click Install. The page also selects the vehicle
-(LEAF / e-NV200) over Web Serial after flashing. Images are built by CI on every
-`v*` tag and published to `images/<version>/`.
-
-## Build / flash (PlatformIO)
-
-```
-pio run -e lilygo-t2canfd              # compile
-pio run -e lilygo-t2canfd -t upload    # flash over USB-C
-pio device monitor -b 115200           # boot log, self-test, A->B / B->A counters
-```
-Plain Arduino C++ under PlatformIO; building in the Arduino IDE is untested (extra
-libraries and the 16 MB flash setting would be on you).
+(LEAF / e-NV200) over Web Serial after flashing.
 
 ## Code layout
 

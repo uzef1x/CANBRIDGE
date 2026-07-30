@@ -17,8 +17,11 @@
 // bus. Return true to forward (optionally after modifying `f`), false to drop.
 static bool translate(BridgeBus from, BridgeFrame &f) {
   switch (vehicle_active()) {
-    case VEHICLE_LEAF:   return leaf_translate(from, f);
-    case VEHICLE_ENV200: return env200_translate(from, f);
+    case VEHICLE_LEAF:    return leaf_translate(from, f);
+    case VEHICLE_ENV200:  return env200_translate(from, f);
+    case VEHICLE_MONITOR:
+      leaf_observe(from, f);  // read-only LEAF detection; never modifies/drops the frame
+      return true;            // pure pass-through: no frame is modified or dropped
   }
   return true;
 }

@@ -13,7 +13,6 @@
 #include "leaf_diag.h"
 #include "telemetry.h"
 #include "can_bus.h"
-#include "vehicle_config.h"
 #include <Arduino.h>
 #include <string.h>
 
@@ -324,8 +323,6 @@ static void parse_7bb(const uint8_t *d, uint32_t now) {
 static uint32_t g_last_activity_ms = 0;  // last TX/RX in the current group transaction
 
 void leaf_diag_capture(BridgeBus from, const BridgeFrame &f) {
-  if (vehicle_active() != VEHICLE_LEAF) return;  // e-NV200 must not be polled
-
   const uint32_t now = millis();
 
   if (f.id == 0x79B) {
@@ -361,8 +358,6 @@ static bool     g_waiting = false;
 static uint32_t g_next_poll_ms = 0;
 
 void leaf_diag_task() {
-  if (vehicle_active() != VEHICLE_LEAF) return;  // e-NV200 must not be polled
-
   const uint32_t now = millis();
 
   if (g_waiting && (now - g_last_activity_ms > DIAG_TIMEOUT_MS)) {

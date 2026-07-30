@@ -18,6 +18,13 @@
 
 bool leaf_translate(BridgeBus from, BridgeFrame &f);
 
+// Read-only detection for Monitor profile (no translation runs, so leaf_translate()
+// never executes): performs ONLY the generation/battery/battery-bus detection
+// assignments from the leaf_translate() handlers above. Never modifies `f`, never
+// injects or drops a frame — purely observes traffic to populate the same
+// detection state read by leaf_detected_vehicle()/leaf_detected_battery().
+void leaf_observe(BridgeBus from, const BridgeFrame &f);
+
 // 1 s housekeeping tick (dala TCC0 ISR): ZE0 resets state if 0x1F2 goes missing.
 void leaf_tick(void);
 void leaf_reset_state(void);

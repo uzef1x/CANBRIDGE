@@ -175,10 +175,10 @@ input[readonly]{opacity:.8}
     <div class="field">
       <label>Vehicle profile</label>
       <div class="row" style="margin-bottom:0">
-        <select id="profSel"><option value="leaf">LEAF</option><option value="env200">e-NV200</option></select>
+        <select id="profSel"><option value="leaf">LEAF</option><option value="env200">e-NV200</option><option value="monitor">Monitor</option></select>
         <button id="profReboot" style="display:none">reboot to apply</button>
       </div>
-      <div class="hint">Applies after reboot. LEAF vs e-NV200 cannot be auto-detected — set it here.</div>
+      <div class="hint">Applies after reboot. LEAF vs e-NV200 cannot be auto-detected — set it here. Monitor is pure pass-through for an unmodified car.</div>
       <div class="statusline" id="profStatus"></div>
     </div>
 
@@ -509,8 +509,8 @@ setInterval(function(){
 var profBusy=false;
 function syncProfile(d){
   var sel=$('profSel');
-  var map={'LEAF':'leaf','e-NV200':'env200'};
-  if(!profBusy && document.activeElement!==sel) sel.value=map[d.profile_stored]||'leaf';
+  var map={'LEAF':'leaf','e-NV200':'env200','Monitor':'monitor'};
+  if(!profBusy && document.activeElement!==sel) sel.value=map[d.profile_stored]||'monitor';
   $('profActive').textContent=d.vehicle||'-';
   $('profReboot').style.display=(d.profile_stored!==d.vehicle)?'':'none';
 }

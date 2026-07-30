@@ -403,6 +403,35 @@ bool leaf_translate(BridgeBus from, BridgeFrame &f) {
   return true;  // forward (possibly modified) to the other bus
 }
 
+// ── Read-only detection for Monitor profile ──────────────────────────────────
+// Mirrors ONLY the detection-state assignments from the leaf_translate() cases
+// above (0x1ED, 0x5EB, 0x50A, 0x380, and the battery_bus capture from 0x1DB that
+// the 0x380 heuristic depends on). Deliberately excludes every byte-mutating,
+// injecting, or blocking behavior from those same cases: `f` is a const ref, so
+// this cannot modify the frame, and it never calls inject()/canbus_send().
+void leaf_observe(BridgeBus from, const BridgeFrame &f) {
+  switch (f.id) {
+
+    case 0x1ED:  My_Battery = MY_BATTERY_62; My_Battery_confirmed = true; break;  // L285-288
+
+    case 0x5EB:  if (My_Battery != MY_BATTERY_62) My_Battery = MY_BATTERY_40;
+                 My_Battery_confirmed = true; break;                              // L307-317
+
+    case 0x50A:  // L394-407 : generation detect
+      if (f.dlc == 6)      { My_Leaf = MY_LEAF_ZE0;  My_Leaf_confirmed = true; }
+      else if (f.dlc == 8) { My_Leaf = MY_LEAF_AZE0; My_Leaf_confirmed = true; }
+      break;
+
+    case 0x380:  // L408-418
+      if (from != battery_bus) { My_Leaf = MY_LEAF_ZE0; My_Leaf_confirmed = true; }  // ZE0 OBC on vehicle side
+      break;
+
+    case 0x1DB:  battery_bus = from; break;  // L339 — needed for the 0x380 check above
+
+    default: break;
+  }
+}
+
 // ── Detection readout (UI only) ──────────────────────────────────────────────
 const char *leaf_detected_vehicle(bool *confirmed) {
   if (confirmed) *confirmed = My_Leaf_confirmed;
