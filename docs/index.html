@@ -35,22 +35,6 @@ select {
     padding: 0.4rem;
 }
 
-button.vehicle {
-    font-size: 1rem;
-    padding: 0.5rem 1.2rem;
-    margin-right: 0.6rem;
-    cursor: pointer;
-}
-
-pre#serial-log {
-    font: 14px monospace;
-    background: #f4f4f4;
-    border: 1px solid #ccc;
-    padding: 0.6rem;
-    min-height: 3rem;
-    white-space: pre-wrap;
-}
-
 .note {
     font-size: 0.9rem;
     color: #555;
@@ -91,14 +75,11 @@ Power it from USB only while flashing (no 12&nbsp;V on VIN).</p>
 <h2>Step 3: Read the WiFi password</h2>
 
 <p>The bridge creates its own WiFi network with a password unique to your
-device, printed on its serial output. <b>Close the installer dialog first</b>
-(it holds the serial port), then click below and press the board's <b>RST</b>
-button — the password appears in the line
-<code>[webui] AP 'CANBRIDGE' password: …</code></p>
-
-<p><button class="vehicle" id="btn-serial">Show device output</button></p>
-
-<pre id="serial-log">Device output appears here.</pre>
+device. In the installer dialog, choose <b>Logs &amp; Console</b>, then click
+<b>Reset device</b> — within a few seconds the password appears in the line
+<code>[webui] AP 'CANBRIDGE' password: …</code>
+(If you already closed the dialog, click the install button again to reopen
+it.)</p>
 
 <p class="note">Nothing else needs configuring. The bridge starts in
 <b>Monitor</b> — a safe pass-through that changes nothing on the CAN bus — and
@@ -167,48 +148,6 @@ fetch("https://api.github.com/repos/" + REPO + "/git/trees/main?recursive=1")
     .catch(() => {
         fwLine.textContent = "Failed to load the firmware list — reload the page.";
     });
-
-// ── Read the device's serial output (Web Serial) ────────────────────────────
-// The generated AP password is printed at boot and again ~5 s in, so a user
-// with no serial terminal can still learn it here.
-let port = null;
-
-async function showSerial() {
-    const log = document.getElementById("serial-log");
-    if (!("serial" in navigator)) {
-        log.textContent = "Web Serial is not supported — use Chrome or Edge.";
-        return;
-    }
-    try {
-        if (!port) {
-            port = await navigator.serial.requestPort();
-            await port.open({ baudRate: 115200 });
-        }
-        log.textContent = "Listening… press the board's RST button.\n";
-        const reader = port.readable.getReader();
-        const dec = new TextDecoder();
-        const timer = setTimeout(() => reader.cancel().catch(() => {}), 30000);
-        try {
-            for (;;) {
-                const { value, done } = await reader.read();
-                if (done) break;
-                log.textContent += dec.decode(value);
-                log.scrollTop = log.scrollHeight;
-            }
-        } finally {
-            clearTimeout(timer);
-            reader.releaseLock();
-        }
-        log.textContent += "\n(stopped listening — click again to resume)";
-    } catch (e) {
-        log.textContent = "Serial error: " + e.message +
-            "\nIf the installer dialog is still open, close it and try again.";
-        try { if (port) await port.close(); } catch (_) {}
-        port = null;
-    }
-}
-
-document.getElementById("btn-serial").addEventListener("click", showSerial);
 </script>
 
 </body>
