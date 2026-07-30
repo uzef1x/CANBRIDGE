@@ -104,7 +104,7 @@ input[readonly]{opacity:.8}
 <h2>Battery <span class="sub" id="battBusNote" title="Which of the bridge's two CAN connectors the battery answered on (wiring check)"></span></h2>
 <div class="grid">
   <div class="tile"><div class="lbl">SOC</div><div class="val big" id="soc">--</div><div class="sub" id="socRaw"></div></div>
-  <div class="tile" title="GIDs is the energy count the battery itself reports. The kWh figure is approximate: it uses 77.5 Wh per GID, a community estimate (LeafSpy's default) — Nissan has never published an official value."><div class="lbl">GIDs</div><div class="val" id="gids">--</div><div class="sub" id="kwh"></div></div>
+  <div class="tile" title="GIDs is the energy count the battery itself reports. The kWh figure is approximate: it uses 77.5 Wh per GID, a community estimate — Nissan has never published an official value."><div class="lbl">GIDs</div><div class="val" id="gids">--</div><div class="sub" id="kwh"></div></div>
   <div class="tile"><div class="lbl">SOH</div><div class="val" id="soh">--</div></div>
   <div class="tile"><div class="lbl">Pack voltage</div><div class="val" id="pv">--</div></div>
   <div class="tile"><div class="lbl">Pack current</div><div class="val" id="pi">--</div></div>
@@ -301,10 +301,10 @@ function render(d){
   $('socRaw').textContent='0.1% raw: '+fmt(d.soc_tenth_pct/10,1)+'%';
   $('gids').textContent=d.gids>=0?d.gids:'--';
   // GIDs is what the battery reports; Wh-per-GID is a community estimate, not a
-  // Nissan-published constant (77 in dala's Battery-Emulator, 77.5 LeafSpy
-  // default, "roughly 80" in the DBC notes). Use LeafSpy's 77.5 and show the
-  // result as approximate — one decimal, leading "~" — so the page never
-  // implies precision the number cannot carry.
+  // Nissan-published constant (77 in dala's Battery-Emulator, 77.5 in the
+  // common diagnostic tooling, "roughly 80" in the DBC notes). Use 77.5 and
+  // show the result as approximate — one decimal, leading "~" — so the page
+  // never implies precision the number cannot carry.
   $('kwh').textContent=d.gids>=0?'~'+(d.gids*77.5/1000).toFixed(1)+' kWh':'';
   $('soh').textContent=d.soh_pct+'%';
   $('pv').textContent=fmt(d.pack_voltage_v,1)+' V';

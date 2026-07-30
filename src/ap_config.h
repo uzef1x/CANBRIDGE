@@ -11,10 +11,11 @@
 
 // Load the persisted password into a static buffer, generating and storing a
 // random per-device default on first boot (no user password has ever been
-// set). Call once, before webui_begin() — i.e. from setup()/bridge_begin(),
-// not from inside webui_begin() itself, since Part D defers webui_begin() to
-// after the first loop() pass. Prints the in-effect password to the boot log
-// every boot (this is how a first-time user learns a generated password).
+// set). Call once, before webui_begin() — bridge_begin()/setup() already do.
+// Prints the in-effect password to the boot log; main.cpp's loop() reprints it
+// at ~5 s uptime, because the boot print lands before USB-CDC re-enumerates
+// after a reset and would otherwise never be seen. That line is how a
+// first-time user learns a generated password.
 void ap_config_begin();
 
 // Returns the stored AP password: a user-set password if one was ever

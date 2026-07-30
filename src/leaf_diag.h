@@ -23,11 +23,15 @@
 // fields are WRITTEN only from that CAN task. Scalar fields (uint32_t/int32_t/
 // float) are plain aligned types written with a single store — atomic on
 // Xtensa — so the web (AsyncTCP) task may read those without a lock. The arrays
-// (cells_mv[96], shunts[3], temp_c[4]) are memcpy'd, NOT single-store; they are
-// read ONLY by build_cells_message()/build_snapshot() inside webui_broadcast(),
-// which runs on the CAN task itself (same task as the writer) — so they cannot
-// tear. Moving any array read to the loop task or an async handler would tear
-// and would need a seqlock/lock.
+// (cells_mv[96], shunts[3], temp_c[4]) are memcpy'd, NOT single-store, and
+// their readers — build_cells_message()/build_snapshot() inside
+// webui_broadcast() — now run on the Arduino loop task, NOT on the writing CAN
+// task (webui_broadcast() was moved there so an lwip stall can no longer trip
+// the CAN task's watchdog). A torn multi-word read of these arrays is therefore
+// possible. That is accepted deliberately: this data is display-only and never
+// feeds car_write_safe()/can_tx_safe(), which read single-word scalars only.
+// See the matching notes in telemetry.h and webui.h. Any future SAFETY decision
+// based on these arrays would need a seqlock or a lock first.
 // ─────────────────────────────────────────────────────────────────────────────
 #pragma once
 #include <stdint.h>
@@ -37,7 +41,7 @@
 #define DIAG_TIMEOUT_MS         500u    // in-flight group abandoned after this much silence
 #define DIAG_EXTERNAL_PAUSE_MS  100000u // pause when a real OBD diagnostic tool is detected (~dala's ~100s margin)
 
-// ── Published diagnostic snapshot (main loop writes, web task reads) ───────────
+// ── Published diagnostic snapshot (CAN-pump task writes, web reads) ───────────
 struct LeafDiag {
   // Group 0x02 — 96 cell voltages, mV. cells_generation bumps only after a full,
   // successfully-parsed set (never expose a half-parsed array).
@@ -80,7 +84,7 @@ extern LeafDiag g_leaf_diag;
 // One-time init. Call once from bridge_begin(), after telemetry_begin().
 void leaf_diag_begin();
 
-// Called from pump() for every RX frame, main loop task, right after
+// Called from pump() for every RX frame, on the CAN-pump task, right after
 // telemetry_capture(). Handles 0x7BB parsing + flow control (battery bus only)
 // and 0x79B external-tool detection (any bus).
 void leaf_diag_capture(BridgeBus from, const BridgeFrame &f);

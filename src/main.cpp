@@ -6,7 +6,11 @@
 //   board_pins.h  – verified T-2CANFD pin map
 //   can_bus.*     – the only hardware-specific code (TWAI + MCP2518FD drivers)
 //   bridge.*      – forwarding core + translate() hook
-//   (later)       – leaf/env200 translation, Nissan CRC, web-config/OTA
+//   vehicle_config/leaf_translation/env200_translation – runtime profile
+//                   (LEAF / e-NV200 / Monitor pass-through + leaf_observe())
+//   nissan_crc.*, leaf_5bc/5c0 – ported checksum + message models
+//   telemetry/leaf_diag/webui.* – read-only tap, diagnostic polling, dashboard
+//   (later)       – OTA
 // ─────────────────────────────────────────────────────────────────────────────
 #include <Arduino.h>
 #include "bridge.h"
