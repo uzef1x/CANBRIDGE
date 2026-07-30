@@ -35,7 +35,7 @@ static void pump(BridgeBus from, BridgeBus to, uint32_t &counter) {
   BridgeFrame f;
   while (canbus_receive(from, f)) {
     telemetry_capture(from, f);  // read-only tap, before translate()
-    leaf_diag_capture(from, f);  // LeafSpy-style diag tap; may TX flow control directly
+    leaf_diag_capture(from, f);  // OBD-style diag tap; may TX flow control directly
     if (translate(from, f)) {
       canbus_send(to, f);
       counter++;
@@ -86,7 +86,7 @@ static void can_task(void *) {
     pump(BUS_B, BUS_A, g_b_to_a);
 
     webui_drain_tx();    // web-originated CAN TX (re-checks car_write_safe inside)
-    leaf_diag_task();    // LeafSpy-style diag poll state machine
+    leaf_diag_task();    // OBD-style diag poll state machine
     webui_broadcast();   // DNS poll + WS telemetry push (reads telemetry; no-op until web up)
 
     const uint32_t now = millis();

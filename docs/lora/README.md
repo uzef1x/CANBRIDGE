@@ -137,7 +137,7 @@ Power: E22 draws ~120 mA peak on TX — fine off the 3V3 rail.
 - Run the sender on its OWN FreeRTOS task / timer — NEVER from the CAN pump task
   (protects the 10 ms 0x1DB forwarding deadline). Read only scalar telemetry
   fields (atomic 32-bit reads, per the concurrency note in `telemetry.h`).
-- LeafSpy-style full 96-cell dump: delta-encode → ~150 bytes, a few times/hour.
+- OBD-style full 96-cell dump: delta-encode → ~150 bytes, a few times/hour.
 
 ## Open items before building
 1. Confirm the E22 IPEX variant part number with the actual supplier at order time.

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// LeafSpy-style battery diagnostic polling (0x79B/0x7BB) for the web dashboard.
+// OBD-style battery diagnostic polling (0x79B/0x7BB) for the web dashboard.
 //
 // Ported (with one deliberate bug fix, noted below) from dalathegreat's
 // Battery-Emulator, GPL-3.0:
@@ -8,7 +8,7 @@
 //   Temp_fromRAW_to_F())
 // https://github.com/dalathegreat/Battery-Emulator
 //
-// This polls the LBC exactly the way a LeafSpy OBD dongle does: one multi-frame
+// This polls the LBC exactly the way an OBD diagnostic dongle does: one multi-frame
 // ISO-TP-style group request every DIAG_POLL_INTERVAL_MS, answered with a chain
 // of 0x7BB frames each acknowledged by a block-size-1 flow-control frame. If a
 // real external tool is seen polling (any 0x79B on either bus — our own TX never
@@ -35,7 +35,7 @@
 
 #define DIAG_POLL_INTERVAL_MS   3000u   // one group request per tick
 #define DIAG_TIMEOUT_MS         500u    // in-flight group abandoned after this much silence
-#define DIAG_EXTERNAL_PAUSE_MS  100000u // pause when a real LeafSpy/OBD tool is detected (~dala's ~100s margin)
+#define DIAG_EXTERNAL_PAUSE_MS  100000u // pause when a real OBD diagnostic tool is detected (~dala's ~100s margin)
 
 // ── Published diagnostic snapshot (main loop writes, web task reads) ───────────
 struct LeafDiag {

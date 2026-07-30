@@ -389,7 +389,7 @@ function renderCells(d){
   $('cellIds').textContent='Part '+(d.part||'--')+' · Serial '+(d.serial||'--')+' · BMS ID '+(d.bmsid||'--');
   var statusEl=$('cellStatus');
   statusEl.innerHTML='polled '+d.poll_age_s+'s ago'+
-    (d.paused?' <span class="badge">paused: external LeafSpy detected</span>':'');
+    (d.paused?' <span class="badge">paused: external OBD tool detected</span>':'');
 
   drawCells(d);
 }

@@ -108,11 +108,11 @@ Features:
   charge/discharge power limits, relay/failsafe status, DTC.
 - Drive tiles: speed (approx), gear, ECO, torque, inverter voltage.
 - Rolling ~15 s sparkline charts for power, SOC, and temperature.
-- **Battery cells** section: polls the LBC the same way a LeafSpy OBD dongle does
+- **Battery cells** section: polls the LBC the same way an OBD diagnostic dongle does
   (0x79B/0x7BB diagnostic groups), one group per ~3 s, covering all 96 cell voltages,
   balancing-shunt status, pack temperatures, Hx, insulation resistance, and the
   battery's part number/serial/BMS ID. Auto-pauses for ~100 s whenever a real
-  LeafSpy/OBD tool is seen polling the bus, to avoid two ISO-TP conversations
+  OBD diagnostic tool is seen polling the bus, to avoid two ISO-TP conversations
   colliding on the same request ID.
 - Frame monitor: live per-ID rate/count/payload tables for both CAN buses.
 - **Custom CAN transmit** panel (battery / vehicle / raw bus A / raw bus B), behind an
@@ -129,25 +129,25 @@ transmits are queued and sent from the dedicated CAN-pump task via `webui_drain_
 the only code that touches the CAN drivers. They are never sent from the WiFi/web task,
 since the CAN drivers are not thread-safe.
 
-## Selecting the vehicle
+## Selecting the profile
 
-Choice is stored in NVS and read once at boot (never swapped mid-run). Over the serial
-monitor (115200) send `leaf`, `env200` or `monitor`, then reboot. The default is Monitor
-— safe pass-through with no frame modification — until you deliberately pick LEAF or
-e-NV200. The profile can also be changed from the web dashboard's Profile dropdown;
-reboot to apply.
+Three profiles exist. Out of the box the bridge runs **Monitor** until you pick
+another profile:
 
-What each profile covers:
+- **Monitor** (default) — for an unmodified LEAF or e-NV200: every frame is
+  forwarded exactly as received, nothing is modified or spoofed. The dashboard
+  is live, and the cell readout works by sending the same diagnostic requests
+  an OBD diagnostic dongle would.
+- **LEAF** — the battery-upgrade translation. Many combinations exist, so the
+  firmware auto-detects the car's generation (ZE0 / AZE0) and the installed
+  battery (24 / 30 / 40 / 62 kWh) from the CAN traffic.
+- **e-NV200** — the van's battery-upgrade translation: 24 → 40 kWh only (the
+  van only ever shipped with those two packs). Nothing is auto-detected; the
+  translation is fixed for that swap.
 
-- **LEAF** — many combinations exist, so the firmware auto-detects them from the
-  CAN traffic: the car's generation (ZE0 / AZE0) and the installed battery
-  (24 / 30 / 40 / 62 kWh). No battery-specific configuration is needed.
-- **e-NV200** — only one option: the van only ever shipped with 24 or 40 kWh,
-  so the bridge does the **24 → 40 kWh upgrade** only. Nothing is auto-detected;
-  the translation is fixed for that swap.
-- **Monitor** — pure pass-through for an unmodified LEAF or e-NV200: no frames
-  are changed or injected, but the dashboard and LeafSpy-style cell polling
-  stay fully live.
+To change the profile: use the web dashboard's Profile dropdown, or send
+`leaf`, `env200` or `monitor` over the serial monitor (115200). The choice is
+stored in NVS, applied at the next reboot, and never swapped mid-run.
 
 ## Flash from a web browser
 
@@ -169,7 +169,7 @@ src/leaf_5c0.h            0x5C0 temperature model + pack
 src/leaf_translation.{h,cpp}    full LEAF battery-upgrade translation
 src/env200_translation.{h,cpp}  e-NV200 (24→40 kWh) translation
 src/telemetry.{h,cpp}     read-only decoded-state tap for the web dashboard
-src/leaf_diag.{h,cpp}     LeafSpy-style battery diagnostic polling (0x79B/0x7BB) for the dashboard
+src/leaf_diag.{h,cpp}     OBD-style battery diagnostic polling (0x79B/0x7BB) for the dashboard
 src/webui.{h,cpp}         WiFi soft-AP + async web server/WebSocket + CAN-TX queue
 src/webui_page.h          embedded dashboard HTML/CSS/JS (PROGMEM)
 src/ap_config.{h,cpp}     WiFi AP password persistence (NVS)
@@ -211,7 +211,7 @@ Source material (© their respective authors):
 - **leaf_can_bus_messages** — https://github.com/dalathegreat/leaf_can_bus_messages (**GPL-3.0**) — CAN signal (DBC) definitions used as reference.
 - **EV-CANlogs** — https://github.com/dalathegreat/EV-CANlogs — real captured CAN logs used for reference/validation.
 - **Battery-Emulator** — https://github.com/dalathegreat/Battery-Emulator (**GPL-3.0**). The
-  dashboard's LeafSpy-style battery diagnostic polling (`src/leaf_diag.*` — 0x79B/0x7BB group
+  dashboard's OBD-style battery diagnostic polling (`src/leaf_diag.*` — 0x79B/0x7BB group
   requests, cell-voltage/shunt/temperature/identity parsing, the `Temp_fromRAW_to_F()`
   conversion) is ported from its `Software/src/battery/NISSAN-LEAF-BATTERY.cpp`.
 - dala's bridges were developed together with **Muxsan**'s 3-port CAN-bridge hardware.

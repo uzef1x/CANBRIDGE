@@ -328,7 +328,7 @@ void leaf_diag_capture(BridgeBus from, const BridgeFrame &f) {
   if (f.id == 0x79B) {
     // Any RECEIVED 0x79B is by definition from an external tool — our own
     // requests are sent via canbus_send() and never loop back into RX. A real
-    // LeafSpy/OBD dongle is on the bus: go quiet to avoid two ISO-TP
+    // OBD diagnostic dongle is on the bus: go quiet to avoid two ISO-TP
     // conversations colliding on the same request ID (mirrors the reference's
     // stop_battery_query, NISSAN-LEAF-BATTERY.cpp L368-371).
     g_leaf_diag.paused_until_ms = now + DIAG_EXTERNAL_PAUSE_MS;
