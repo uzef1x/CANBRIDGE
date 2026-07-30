@@ -79,7 +79,9 @@ to each port. Both segments are classic **CAN 2.0B @ 500 kbit/s**.
                  VIN 12–24 V (+) ───┤   ← car switched 12 V accessory
                  GND (−)         ───┘     (USB-C 5 V = bench/flashing only)
 
-   * Nissan LEAF harness color codes at the VCM — see the wire-color note below.
+   * Nissan code L = blue, G = green — LEAF harness colors at the VCM per the 2015
+     US-market LEAF service manual (SM15EA0ZE0U0). Colors are not uniform on every
+     branch of the harness; confirm the pair electrically before cutting.
 ```
 
 Photos of the actual board (T_2CAN_FD V1.0):
@@ -100,76 +102,15 @@ leave as shipped).
 
 ![T-2CANFD top side](docs/hardware/t2canfd_top.jpg)
 
-### Which connectors? (the board edge has several — only three are used)
-
-Pinouts below are read from LilyGo's schematic
-([`project/T-2Can-Fd_V1.0.pdf`](https://github.com/Xinyuan-LilyGO/T-2Can/blob/main/project/T-2Can-Fd_V1.0.pdf),
-a copy is in `docs/lora/T-2Can-Fd_V1.0_schematic.pdf`):
-
-| Connector | Type | Used for | Pinout (schematic) |
-|---|---|---|---|
-| **P1** | black 4-pin 3.81 mm screw terminal (WJ15EDGVC-3.81-4P) | **CAN-B port (TWAI)** — one EV-CAN segment | `DGNDB · CANHB · CANLB · SGNDB` — per-pin labels on the board's underside |
-| **P2** | black 4-pin 3.81 mm screw terminal (WJ15EDGVC-3.81-4P) | **CAN-A port (MCP2518FD)** — the other EV-CAN segment | `DGNDA · CANHA · CANLA · SGNDA` — per-pin labels on the board's underside |
-| — | 2-pin 5.08 mm terminal (WJ500V-5.08-2P) | **Power in** | 1 = GND, 2 = VIN 12–24 V |
-| CNC1 | small white JST-SH 1.0 mm 4-pin | **not CAN** — 3.3 V UART expansion | 1 = GND, 2 = 3V3, 3 = TX, 4 = RX |
-| CNC2 | small white JST-SH 1.0 mm 4-pin | **not CAN** — spare GPIO (IO1/IO2) | 1 = GND, 2 = 3V3, 3 = IO1, 4 = IO2 |
-| USB-C | — | flashing + bench power only | — |
-
-- Only the EV-CAN pair carries the bus: **connect CANH and CANL to pins 2 and 3** of
-  each green terminal. Pins 1/4 are the isolated-side ground and the shield
-  termination (SGND couples to DGND through 1 nF/2 kV ‖ 1 MΩ on the board); the
-  plain Nissan twisted pair needs neither.
-- The two small white JST-SH connectors are **not CAN ports** — leave them empty.
-- Connect **each EV-CAN segment to one port**: CANH→CANH, CANL→CANL.
-- It does **not** matter which port faces the vehicle vs the battery — the firmware
-  **auto-detects the battery side** (from 0x1DB on LEAF / 0x55B on e-NV200) and is
-  otherwise a symmetric bidirectional bridge.
-- No pin-counting needed: **each screw's net name is printed on the board's
-  underside** next to its solder pad — wire by those labels.
-- Power from the car's **switched 12 V** on `VIN` (board accepts 12–24 V). Use USB-C 5 V
-  only on the bench.
-
-### EV-CAN wire colors (Nissan side)
-
-From the 2015 Nissan LEAF service manual (pub. SM15EA0ZE0U0, North American market),
-ECU "Terminal No. (Wire color)" tables:
-
-| ECU | EV-CAN H | EV-CAN L |
-|---|---|---|
-| VCM (terminals 24/25) | **L** | **G** |
-| Traction motor inverter (14/15) | **L** | **G** |
-| A/C auto amp (28/29) | **L** | **G** |
-| PDM / charger (27/11) | **W** | **L** |
-
-In Nissan's wire-color code, `L` = blue and `G` = green (the code letters are as
-printed in the manual; the letter→color mapping is the standard Nissan convention —
-this PDF copy is missing its legend page). So at the usual tap points the EV-CAN
-pair is a **blue (CAN-H) / green (CAN-L)** twisted pair — but note the PDM row
-above: **colors are not uniform on every branch of the harness**, and this source
-is a 2015 US-market manual, not an EU one. No documented e-NV200 EV-CAN colors were
-found. **Never identify the pair by color alone** — confirm electrically first
-(≈2.5 V idle / 60 Ω differential across a terminated pair with the pack connected,
-or a scope) before cutting anything.
-
-### On-board pinout (reference — already routed on the PCB; you do NOT wire these)
-
-| Function | ESP32-S3 GPIO |
-|---|---|
-| CAN-B (TWAI) TX / RX | GPIO7 / GPIO6 |
-| CAN-A (MCP2518FD) chip-select | GPIO10 |
-| CAN-A SPI SCK / MOSI / MISO | GPIO12 / GPIO11 / GPIO13 |
-| CAN-A interrupt | GPIO8 |
-| MCP2518FD oscillator | 20 MHz per LilyGo's example code — but the schematic prints a 40 MHz crystal; **confirm at first bench CAN test** (wrong setting = half/double bit rate) |
-
-Verified against `Xinyuan-LilyGO/T-2Can → libraries/private_library/pin_config.h`.
-
-> ⚠️ **The vehicle-side tap is car-specific and safety-critical.** *Where* to cut/tap the
-> EV-CAN — which harness connector and which wires — depends on the model and is
-> documented in dalathegreat's install guides and videos, **not here** (this README does
-> not invent Nissan pinouts). See the
-> [e-NV200](https://github.com/dalathegreat/Nissan-env200-Battery-Upgrade) and
-> [LEAF](https://github.com/dalathegreat/Nissan-LEAF-Battery-Upgrade) install docs.
-> Mis-wiring the EV-CAN can immobilise the car.
+**Oscillator auto-detection.** The MCP2518FD crystal is either 20 MHz or 40 MHz
+depending on the board, and the wrong choice halves or doubles CAN-A's bit rate so
+it hears nothing. The firmware sorts this out itself: on first run it alternates
+trial configurations until real frames arrive, prints `[can_a] oscillator
+auto-detected: 40 MHz`, and stores the result, so every later boot goes straight to
+`[can_a] using saved 40 MHz oscillator`. The trials only listen and acknowledge —
+they never transmit, so detection is safe on a live bus. Detection keeps waiting
+harmlessly if CAN-A is silent, and CAN-B, the web dashboard and the rest of the
+bridge are unaffected throughout.
 
 ## Web dashboard
 The bridge runs a WiFi soft-AP + live telemetry dashboard, no phone app or toolchain
