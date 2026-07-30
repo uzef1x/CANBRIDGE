@@ -150,14 +150,14 @@ input[readonly]{opacity:.8}
   <div class="sub" id="cellStatus">waiting for battery diagnostics&hellip;</div>
 </div>
 
-<h2>Trends (~60s)</h2>
+<h2>Trends (~15s)</h2>
 <div class="chartrow">
   <div class="chartbox"><div class="lbl">Power (kW)</div><canvas class="spark" id="chPower"></canvas></div>
   <div class="chartbox"><div class="lbl">SOC (%)</div><canvas class="spark" id="chSoc"></canvas></div>
   <div class="chartbox"><div class="lbl">Temp (&deg;C)</div><canvas class="spark" id="chTemp"></canvas></div>
 </div>
 
-<h2>Frame monitor</h2>
+<h2>Frame monitor <span class="badge" id="monDropped" style="display:none"></span></h2>
 <div class="chartrow">
   <div class="tablewrap"><b>Bus A</b>
     <table id="tblA"><thead><tr><th data-k="id">ID</th><th data-k="hz">Hz</th><th data-k="count">Count</th><th>Data</th></tr></thead><tbody></tbody></table>
@@ -271,10 +271,14 @@ function statusReply(d){
 
 var lastFrameTs=0;
 var writeSafe=true;
+var txSafe=false;   // stricter: TX needs positive confirmation the car is parked
+var lastUptimeMs=0;
 function render(d){
   lastFrameTs=Date.now();
+  lastUptimeMs=d.uptime_ms||0;
   syncProfile(d);
   writeSafe=!!d.write_safe;
+  txSafe=!!d.tx_safe;
   applyLock();
   $('detected').textContent=d.detected||'-';
   var canLive = d.can_rx_age_ms>=0 && d.can_rx_age_ms<2000;
@@ -322,7 +326,15 @@ function render(d){
   renderTable('tblA', d.frames.filter(function(f){return f.bus==='A';}));
   renderTable('tblB', d.frames.filter(function(f){return f.bus==='B';}));
 
-  $('txSend').disabled = !armed || !writeSafe;
+  var monEl=$('monDropped');
+  if(d.mon_dropped>0){
+    monEl.textContent='+'+d.mon_dropped+' more IDs not shown (table full)';
+    monEl.style.display='';
+  } else {
+    monEl.style.display='none';
+  }
+
+  $('txSend').disabled = !armed || !txSafe;
 }
 
 function applyLock(){
@@ -338,12 +350,12 @@ function applyLock(){
       el.disabled=!writeSafe;
     }
   });
-  if(!writeSafe && armed){
+  if(!txSafe && armed){
     armed=false;
     $('armSwitch').className='switch';
     $('armLabel').textContent='Arm transmit: OFF';
   }
-  $('txSend').disabled = !armed || !writeSafe;
+  $('txSend').disabled = !armed || !txSafe;
 }
 
 function push(arr,v){arr.push(v);while(arr.length>HIST_N)arr.shift();}
@@ -388,8 +400,15 @@ function renderCells(d){
 
   $('cellIds').textContent='Part '+(d.part||'--')+' · Serial '+(d.serial||'--')+' · BMS ID '+(d.bmsid||'--');
   var statusEl=$('cellStatus');
-  statusEl.innerHTML='polled '+d.poll_age_s+'s ago'+
-    (d.paused?' <span class="badge">paused: external OBD tool detected</span>':'');
+  // paused_ext tells us WHY polling is paused: an external tool, or the
+  // bridge's own post-boot hold-off. Never guess — state what the bridge says.
+  var pauseNote='';
+  if(d.paused){
+    pauseNote = d.paused_ext
+      ? ' <span class="badge">paused: external OBD tool detected</span>'
+      : ' <span class="sub">starting up&hellip;</span>';
+  }
+  statusEl.innerHTML='polled '+d.poll_age_s+'s ago'+pauseNote;
 
   drawCells(d);
 }
@@ -477,11 +496,11 @@ document.querySelectorAll('th[data-k]').forEach(function(th){
 
 var armed=false;
 $('armSwitch').addEventListener('click',function(){
-  if(!writeSafe)return;
+  if(!txSafe)return;
   armed=!armed;
   $('armSwitch').className='switch'+(armed?' armed':'');
   $('armLabel').textContent='Arm transmit: '+(armed?'ON':'OFF');
-  $('txSend').disabled=!armed||!writeSafe;
+  $('txSend').disabled=!armed||!txSafe;
 });
 
 function updateDlc(){
@@ -539,55 +558,7 @@ $('apPwSave').addEventListener('click',function(){
   $('apPw').value='';
 });
 
-// Demo mode (?demo): synthetic data through the SAME render path, client-side
-// only — the firmware never fabricates frames. For bench UI evaluation.
-var DEMO=/[?#&]demo/.test(location.search+location.hash);
-if(DEMO){
-  var banner=document.createElement('div');
-  banner.textContent='DEMO DATA — synthetic values, not a real battery';
-  banner.style.cssText='position:sticky;top:0;z-index:99;background:#f5a623;color:#000;text-align:center;padding:6px;font-weight:bold';
-  document.body.insertBefore(banner,document.body.firstChild);
-  $('wsState').textContent='demo';$('dotWs').className='dot on';
-  var t0=Date.now(), demoGen=0;
-  var demoBase=[]; for(var i=0;i<96;i++)demoBase.push(3810+Math.round(Math.sin(i*1.7)*8));
-  demoBase[37]-=55;  // one weak cell to make min/spread interesting
-  var demoShunts='000400000000010000002000';
-  function demoCells(){
-    demoGen++;
-    renderCells({type:'cells',gen:demoGen,
-      mv:demoBase.map(function(m){return m+Math.round(Math.random()*4-2);}),
-      shunts:demoShunts,temps:[22,23,null,21],hx:2.31,insulation:3021,
-      part:'3NK2AR4',serial:'230UK1192E00148',bmsid:'DCA10055',poll_age_s:2,paused:0});
-  }
-  setInterval(function(){
-    var t=(Date.now()-t0)/1000;
-    var drive=Math.sin(t/8);
-    var pkw=drive*40+Math.sin(t*1.3)*6;
-    var soc=87-(t/60)%5;
-    var v=360-drive*8;
-    render({fw:'demo',vehicle:'LEAF',profile_stored:'LEAF',uptime_ms:t*1000,free_heap:220000,battery_bus:1,can_rx_age_ms:50,write_safe:1,
-      detected:'AZE0 (2013-17) · 40 kWh',
-      soc_tenth_pct:soc*10,usable_soc_pct:Math.round(soc),gids:Math.round(soc*4.9),soh_pct:91,
-      pack_voltage_v:v,pack_current_a:pkw*1000/v,pack_power_kw:pkw,
-      temp_max_c:24,temp_avg_c:22,temp_min_c:21,battery_dtc:0,
-      max_discharge_kw:110,max_charge_kw:60,
-      lb_failsafe_status:0,lb_relay_cut_request:0,lb_main_relay_on:1,
-      torque_nm:drive*120,inverter_voltage_v:v-2,gear:4,eco_on:1,
-      speed_kmh:Math.max(0,drive*90),charge_power_kw:0,target_soc_80:0,vcm_awake:1,car_state:1,
-      frames:[
-        {bus:'B',id:'0x1DB',count:Math.round(t*100),hz:100,data:'2F0A31C000000000',age_ms:5},
-        {bus:'B',id:'0x55B',count:Math.round(t*10),hz:10,data:'6A80000000000000',age_ms:40},
-        {bus:'B',id:'0x5BC',count:Math.round(t*10),hz:10,data:'4E60000000000000',age_ms:60},
-        {bus:'A',id:'0x1D4',count:Math.round(t*100),hz:100,data:'F70700004000007F',age_ms:4},
-        {bus:'A',id:'0x11A',count:Math.round(t*100),hz:100,data:'4E40000000000000',age_ms:8},
-        {bus:'A',id:'0x284',count:Math.round(t*50),hz:50,data:'0000000012340000',age_ms:12}
-      ]});
-  },250);
-  demoCells();
-  setInterval(demoCells,3000);
-}else{
-  connect();
-}
+connect();
 </script>
 </body></html>
 )rawliteral";

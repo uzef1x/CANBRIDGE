@@ -28,6 +28,7 @@ void leaf_diag_begin() {
   // Hold off the first poll for ~20s after boot so the LBC contactor-closing
   // window isn't disturbed by an active-diag request right at power-up.
   g_leaf_diag.paused_until_ms = millis() + 20000;
+  g_leaf_diag.ext_pause       = 0;  // this pause is the startup hold-off, not a tool
 }
 
 // ── Temp_fromRAW_to_F — ported VERBATIM from Battery-Emulator ──────────────────
@@ -332,6 +333,7 @@ void leaf_diag_capture(BridgeBus from, const BridgeFrame &f) {
     // conversations colliding on the same request ID (mirrors the reference's
     // stop_battery_query, NISSAN-LEAF-BATTERY.cpp L368-371).
     g_leaf_diag.paused_until_ms = now + DIAG_EXTERNAL_PAUSE_MS;
+    g_leaf_diag.ext_pause       = 1;  // a real tool, not the startup hold-off
     return;
   }
 

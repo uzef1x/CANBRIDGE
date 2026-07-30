@@ -4,8 +4,9 @@
 // WebSocket message handling (onMessage) runs in the AsyncTCP task — it must
 // never touch the CAN drivers directly. Parsed TX requests go onto g_tx_queue;
 // webui_drain_tx() (called from the dedicated CAN-pump task) is the only place
-// canbus_send() is called from here. webui_broadcast() also runs on the CAN
-// task; webui_housekeeping() (NVS writes, reboot) runs on the Arduino loop task.
+// canbus_send() is called from here. webui_broadcast() and webui_housekeeping()
+// (NVS writes, reboot) both run on the Arduino loop task, NOT the CAN task —
+// see webui.h for why.
 // ─────────────────────────────────────────────────────────────────────────────
 #include "webui.h"
 #include "telemetry.h"
@@ -94,9 +95,11 @@ static void ws_ack(AsyncWebSocketClient *client, const char *msg) {
   ws_reply(client, out);
 }
 
-// Handle {"cmd":"tx",...} — queue a custom TX frame. Gated by car_write_safe().
+// Handle {"cmd":"tx",...} — queue a custom TX frame. Gated by can_tx_safe():
+// this is the one command that actually puts a frame on the vehicle CAN bus,
+// so — unlike the other commands below — it must NOT unlock on a silent bus.
 static void handle_cmd_tx(AsyncWebSocketClient *client, JsonDocument &doc) {
-  if (!car_write_safe()) { ws_err(client, "locked: car must be parked"); return; }
+  if (!can_tx_safe()) { ws_err(client, "locked: cannot confirm the car is parked"); return; }
 
   const char *bus_tok = doc["bus"] | "";
   const char *id_str  = doc["id"] | "";
@@ -298,7 +301,7 @@ static void build_snapshot(char *buf, size_t buflen) {
   int n = snprintf(buf, buflen,
     "{\"fw\":\"" FW_VERSION "\","
     "\"vehicle\":\"%s\",\"uptime_ms\":%lu,\"free_heap\":%lu,"
-    "\"profile_stored\":\"%s\",\"detected\":\"%s\",\"write_safe\":%d,"
+    "\"profile_stored\":\"%s\",\"detected\":\"%s\",\"write_safe\":%d,\"tx_safe\":%d,"
     "\"can_rx_age_ms\":%ld,"
     "\"battery_bus\":%ld,\"last_battery_frame_ms\":%lu,"
     "\"pack_voltage_v\":%.1f,\"pack_current_a\":%.1f,\"pack_power_kw\":%.2f,"
@@ -309,9 +312,9 @@ static void build_snapshot(char *buf, size_t buflen) {
     "\"lb_failsafe_status\":%ld,\"lb_relay_cut_request\":%ld,\"lb_main_relay_on\":%ld,"
     "\"torque_nm\":%.1f,\"inverter_voltage_v\":%.0f,\"gear\":%ld,\"eco_on\":%ld,"
     "\"speed_kmh\":%.1f,\"charge_power_kw\":%.2f,\"target_soc_80\":%ld,\"vcm_awake\":%ld,"
-    "\"car_state\":%ld,\"frames\":[",
+    "\"car_state\":%ld,\"mon_dropped\":%lu,\"frames\":[",
     vehicle_name(vehicle_active()), (unsigned long)millis(), (unsigned long)ESP.getFreeHeap(),
-    vehicle_name(vehicle_stored()), detected, car_write_safe() ? 1 : 0,
+    vehicle_name(vehicle_stored()), detected, car_write_safe() ? 1 : 0, can_tx_safe() ? 1 : 0,
     (long)(t.last_rx_ms ? (int32_t)(millis() - t.last_rx_ms) : -1),
     (long)t.battery_bus, (unsigned long)t.last_battery_frame_ms,
     t.pack_voltage_v, t.pack_current_a, t.pack_power_kw,
@@ -322,7 +325,8 @@ static void build_snapshot(char *buf, size_t buflen) {
     (long)t.lb_failsafe_status, (long)t.lb_relay_cut_request, (long)t.lb_main_relay_on,
     t.torque_nm, t.inverter_voltage_v, (long)t.gear, (long)t.eco_on,
     t.speed_kmh, t.charge_power_kw, (long)t.target_soc_80, (long)t.vcm_awake,
-    (long)t.car_state);
+    (long)t.car_state,
+    (unsigned long)(g_frame_mon_dropped[0] + g_frame_mon_dropped[1]));
 
   bool first = true;
   const uint32_t now = millis();
@@ -382,9 +386,9 @@ static void build_cells_message(char *buf, size_t buflen) {
   const int paused = ((int32_t)(now - ld.paused_until_ms) < 0) ? 1 : 0;
   n += snprintf(buf + n, (n < (int)buflen) ? buflen - n : 0,
     "],\"hx\":%.2f,\"insulation\":%lu,\"part\":\"%s\",\"serial\":\"%s\",\"bmsid\":\"%s\","
-    "\"poll_age_s\":%lu,\"paused\":%d}",
+    "\"poll_age_s\":%lu,\"paused\":%d,\"paused_ext\":%d}",
     (double)ld.hx_pct, (unsigned long)ld.insulation_raw, ld.part_number, ld.serial, ld.bms_id,
-    (unsigned long)age_s, paused);
+    (unsigned long)age_s, paused, (paused && ld.ext_pause) ? 1 : 0);
 }
 
 // Drain pending settings requests stashed by the AsyncTCP task. Main loop
@@ -400,10 +404,13 @@ static void drain_pending_settings() {
   }
 }
 
-// Telemetry push — runs on the CAN-pump task (same task that WRITES telemetry/
-// leaf_diag, so the multi-word arrays read by build_snapshot()/build_cells_
-// message() can't tear). Reads only; no NVS, no reboot, no CAN TX. No-op until
-// webui_begin() has run.
+// Telemetry push — runs on the Arduino loop task, NOT the CAN-pump task that
+// writes telemetry/leaf_diag (moved off the CAN task so an lwip/WS stall here
+// can't trip the CAN task's panic watchdog — see webui.h). The multi-word
+// arrays read by build_snapshot()/build_cells_message() are therefore read
+// cross-task without a lock; see webui.h/telemetry.h for why that's an
+// accepted (display-only) trade-off. Reads only; no NVS, no reboot, no CAN TX.
+// No-op until webui_begin() has run.
 void webui_broadcast() {
   if (!g_web_started) return;
 
@@ -456,7 +463,9 @@ void webui_drain_tx() {
     // Re-check the interlock HERE (main loop), not just at enqueue time on the
     // async task: the car could have started moving between queueing and now.
     // Belt-and-suspenders against the cross-task TOCTOU — drop stale writes.
-    if (!car_write_safe()) continue;
+    // Uses can_tx_safe(), not car_write_safe(): this is the actual CAN TX site,
+    // so a silent bus must NOT unlock it (see handle_cmd_tx above).
+    if (!can_tx_safe()) continue;
     canbus_send(req.bus, req.frame);  // main loop task only — driver not thread-safe
   }
 }

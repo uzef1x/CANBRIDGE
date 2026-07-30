@@ -97,8 +97,10 @@ Nothing is wrong: it locks on first traffic.
 The bridge runs a WiFi soft-AP + live telemetry dashboard, no phone app or toolchain
 needed:
 
-- **Connect to WiFi**: SSID `CANBRIDGE`, password `canbridge123` (the default; it can
-  be changed from the dashboard's settings).
+- **Connect to WiFi**: SSID `CANBRIDGE`. Each bridge generates its own random
+  password on first boot and prints it on the serial console — the web installer
+  shows that line right after flashing, e.g. `[webui] AP 'CANBRIDGE' password: …`.
+  You can set your own password later from the dashboard's settings.
 - **Open** <http://10.0.0.1:8080> in a phone or laptop browser. The explicit `:8080` port stops browsers from silently upgrading the address to HTTPS (which the bridge cannot serve); plain <http://10.0.0.1> also works, except in browsers that force an HTTPS upgrade for all sites. The AP answers the OS connectivity checks, so phones treat it as a normal network and route to the bridge over WiFi.
 
 Features:
@@ -118,7 +120,9 @@ Features:
   colliding on the same request ID.
 - Frame monitor: live per-ID rate/count/payload tables for both CAN buses.
 - **Custom CAN transmit** panel (battery / vehicle / raw bus A / raw bus B), behind an
-  "Arm transmit" toggle.
+  "Arm transmit" toggle. Transmitting also requires the bridge to positively confirm
+  from live CAN traffic that the car is parked, so the panel stays locked on a bench
+  with no car attached.
 
   > ⚠️ **Transmitting on a live vehicle bus can trigger faults or unsafe behavior.**
   > Only use the custom-TX panel when you understand the frame you're sending. This

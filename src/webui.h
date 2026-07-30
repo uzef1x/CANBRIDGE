@@ -16,10 +16,16 @@
 // and this ~1 s blocking bring-up cannot stall it. Not idempotent — call once.
 void webui_begin();
 
-// Telemetry push: DNS poll + rate-limited (250 ms) WebSocket broadcast. Reads
-// telemetry/leaf_diag state, so it MUST run on the CAN-pump task (the same task
-// that writes that state) to avoid tearing the multi-word arrays. Never writes
-// NVS / reboots / sends CAN.
+// Telemetry push: DNS poll + rate-limited (250 ms) WebSocket broadcast. Runs on
+// the Arduino loop task (NOT the CAN task) — that task is the only one watched
+// by the panic watchdog, and this code takes lwip/WebSocket locks that could
+// stall >2 s, which would otherwise panic-reboot the bridge mid-drive. Reads
+// (never writes) telemetry/leaf_diag state; the multi-word arrays it reads
+// (frame-monitor rows, cells_mv[], shunts[]) are written by the CAN task
+// without a lock, so a rare torn read is possible now that reader and writer
+// are on different tasks — display-only data, never consulted by
+// car_write_safe()/can_tx_safe() (see telemetry.h), so this is an accepted
+// trade-off. Never writes NVS / reboots / sends CAN.
 void webui_broadcast();
 
 // Loop-task housekeeping: apply pending NVS settings writes and any deferred

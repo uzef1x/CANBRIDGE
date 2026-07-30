@@ -70,6 +70,9 @@ struct LeafDiag {
 
   uint32_t last_poll_ok_ms;   // millis() of the last fully-parsed group response
   uint32_t paused_until_ms;   // millis() until which polling is paused (0 = never paused yet)
+  uint32_t ext_pause;         // 1 = the current pause was caused by an external OBD tool,
+                              // 0 = startup hold-off (or not paused). Lets the dashboard
+                              // state the reason instead of guessing it from uptime.
 };
 
 extern LeafDiag g_leaf_diag;

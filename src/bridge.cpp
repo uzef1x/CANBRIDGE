@@ -60,12 +60,25 @@ void bridge_begin() {
 // nothing on the web side (the ~1 s WiFi bring-up, NVS flash writes, JSON
 // serialization) can stall CAN forwarding — the whole reason this task exists.
 //
-// It also runs webui_broadcast() (DNS poll + WebSocket telemetry push): that
-// code READS telemetry/leaf_diag arrays, so it is deliberately kept on THIS
-// task (same task as the writer) to avoid cross-task tearing of the multi-word
-// arrays (cells_mv[], shunts[], frame-monitor rows). NVS writes and reboot are
+// webui_broadcast() (DNS poll + WebSocket telemetry push) does NOT run here —
+// it moved to the Arduino loop task (see loop() in main.cpp), because this is
+// the ONLY task the panic watchdog watches: an lwip/AsyncTCP stall inside
+// webui_broadcast() (>2 s) would otherwise trip the WDT and reboot the whole
+// bridge, dropping the battery off EV-CAN, possibly mid-drive. webui_drain_tx()
+// (the only sanctioned CAN TX site) stays here. NVS writes and reboot are also
 // NOT done here (they belong to the loop task, where a flash-write stall is
 // harmless) — see webui_housekeeping() called from loop().
+//
+// Residual note (moved from a prior comment here): webui_broadcast() reads the
+// multi-word telemetry/leaf_diag arrays (frame-monitor rows, cells_mv[],
+// shunts[]) that this task writes without a lock. Now that the reader runs on
+// a different task, a torn read of one of those multi-word rows is possible
+// (e.g. a frame-monitor row's id/data updated but not yet its timestamp) —
+// see the concurrency note in telemetry.h. This is display-only data (frame
+// monitor / cell voltages), never consulted by car_write_safe()/can_tx_safe()
+// (which read only single-word scalars), so the worst case is a rare glitchy
+// row in the dashboard, not a safety issue — an accepted trade-off for taking
+// this task off the watchdog-panic blast radius.
 //
 // The one thing this task must not do is starve the core: it yields one tick
 // (~1 ms at the 1000 Hz FreeRTOS tick) each pass. CAN frames arrive no faster
@@ -85,9 +98,8 @@ static void can_task(void *) {
     pump(BUS_A, BUS_B, g_a_to_b);
     pump(BUS_B, BUS_A, g_b_to_a);
 
-    webui_drain_tx();    // web-originated CAN TX (re-checks car_write_safe inside)
+    webui_drain_tx();    // web-originated CAN TX (re-checks can_tx_safe inside)
     leaf_diag_task();    // OBD-style diag poll state machine
-    webui_broadcast();   // DNS poll + WS telemetry push (reads telemetry; no-op until web up)
 
     const uint32_t now = millis();
     if (now - g_last_report_ms >= 2000) {
@@ -110,16 +122,20 @@ void bridge_start_can_task() {
   // when CAN forwarding on core 1 is perfectly healthy. That is the opposite of
   // what we want: a web-side problem must NOT reboot a working bridge. So drop
   // the core-0 IDLE subscription; the CAN task (added below, via
-  // esp_task_wdt_add in can_task) becomes the ONLY watched task. (Residual: the
-  // CAN task's own webui_broadcast() briefly takes lwip/WebSocket locks, so a
-  // true lwip deadlock could still stall the CAN task and trip ITS 2 s watchdog
-  // — a bounded, controlled reboot, not a silent hang.)
+  // esp_task_wdt_add in can_task) becomes the ONLY watched task. webui_broadcast()
+  // (the code that takes lwip/WebSocket locks) no longer runs on this task — it
+  // moved to the unwatched Arduino loop task — so an lwip stall there can no
+  // longer trip this watchdog at all.
   disableCore0WDT();
 
   // Core 1 (APP_CPU, same core as the Arduino loop); WiFi/lwip live on core 0.
   // Priority 11 is ONE above the AsyncTCP task (CONFIG_ASYNC_TCP_PRIORITY = 10,
   // no core affinity) so CAN genuinely wins latency races on core 1, while the
   // per-pass vTaskDelay(1) still guarantees the loop task (prio 1) and IDLE get
-  // CPU. 12 KB stack covers the JSON snprintf path (its big buffers are static).
+  // CPU. 12 KB stack was originally sized for the JSON snprintf path (its big
+  // buffers are static); that path (webui_broadcast()/build_snapshot()) no
+  // longer runs on this task (see loop() in main.cpp) but this task's own
+  // JSON-producing code (Serial.printf reports, leaf_diag_task()) is far
+  // smaller, so 12 KB is still generous headroom here, not a tight fit.
   xTaskCreatePinnedToCore(can_task, "can_pump", 12288, nullptr, 11, &g_can_task, 1);
 }

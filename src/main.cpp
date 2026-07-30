@@ -15,6 +15,7 @@
 #include "webui.h"
 #include "vehicle_config.h"
 #include "can_bus.h"
+#include "ap_config.h"
 #include "fw_version.h"
 
 // Task watchdog (2 s, panic-reboot) is configured, the core-0 IDLE subscription
@@ -66,12 +67,24 @@ void setup() {
 
 void loop() {
   // The Arduino loop task now handles ONLY non-CAN, stall-tolerant work: serial
-  // vehicle selection (rare NVS write) and web housekeeping (pending NVS
-  // settings writes + deferred reboot). All CAN forwarding runs on the dedicated
-  // task created in setup(); nothing here can block it. This task is not
-  // watchdog-monitored on purpose (a hung web side must not reboot a healthy
-  // bridge).
+  // vehicle selection (rare NVS write), web housekeeping (pending NVS settings
+  // writes + deferred reboot), and the telemetry WebSocket broadcast. All CAN
+  // forwarding runs on the dedicated task created in setup(); nothing here can
+  // block it. This task is not watchdog-monitored on purpose (a hung web side
+  // must not reboot a healthy bridge) — which is exactly why webui_broadcast()
+  // (DNS poll + WS push, lwip/AsyncTCP locks and all) lives here rather than on
+  // the CAN task: an lwip stall here just delays the dashboard, not CAN forwarding.
+  // The boot-time AP password print happens before USB-CDC re-enumerates after
+  // a reset, so nobody ever sees it. Repeat it once the port is certainly up —
+  // this line is the only way a user learns a generated password.
+  static bool pw_reprinted = false;
+  if (!pw_reprinted && millis() > 5000) {
+    pw_reprinted = true;
+    Serial.printf("[webui] AP 'CANBRIDGE' password: %s\n", ap_password());
+  }
+
   vehicle_serial_task();
+  webui_broadcast();       // DNS poll + WS telemetry push (reads telemetry; no-op until web up)
   webui_housekeeping();
   canbus_housekeeping();  // persists a detected CAN-A oscillator (NVS write)
   delay(5);  // yield to the CAN task, AsyncTCP, and IDLE (feeds the IDLE WDT)

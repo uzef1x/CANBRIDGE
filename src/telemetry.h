@@ -7,17 +7,22 @@
 // Concurrency: g_telemetry / g_frame_mon are WRITTEN only by the dedicated
 // CAN-pump task (telemetry_capture(), via bridge.cpp's pump()). Two kinds of
 // reader exist:
-//   1. The AsyncTCP (web) task reads only SCALAR fields — via car_write_safe()
-//      and webui.cpp's resolve_bus(). Every scalar here is a plain 32-bit type
-//      (int32_t/uint32_t/float) written with a single store; aligned 32-bit
-//      read/write is atomic on Xtensa, so these cross-task scalar reads cannot
-//      tear (as long as no field grows past 32 bits or is written non-atomically).
+//   1. The AsyncTCP (web) task reads only SCALAR fields — via car_write_safe(),
+//      can_tx_safe(), and webui.cpp's resolve_bus(). Every scalar here is a
+//      plain 32-bit type (int32_t/uint32_t/float) written with a single store;
+//      aligned 32-bit read/write is atomic on Xtensa, so these cross-task
+//      scalar reads cannot tear (as long as no field grows past 32 bits or is
+//      written non-atomically).
 //   2. The multi-word g_frame_mon rows (memcpy'd, not single-store) are read
-//      ONLY by build_snapshot(), which runs inside webui_broadcast() — and that
-//      runs on the CAN-pump task itself, the SAME task that writes them. So no
-//      cross-task tearing is possible for the arrays. This is a hard invariant:
-//      a future change that reads g_frame_mon from the loop task or an async
-//      handler WOULD tear and would need a seqlock/lock — do not move it.
+//      by build_snapshot(), called from webui_broadcast() on the Arduino loop
+//      task — a DIFFERENT task from the CAN-pump task that writes them (moved
+//      there deliberately so an lwip/WS stall can't trip the CAN task's panic
+//      watchdog; see webui.h). This IS a cross-task read of un-locked
+//      multi-word state: a torn row (e.g. id/data updated but not yet its
+//      timestamp) is possible. Accepted trade-off — this is display-only data
+//      (frame monitor / cell voltages), never consulted by car_write_safe()/
+//      can_tx_safe() (which read only the single-word scalars above), so the
+//      worst case is a rare glitchy dashboard row, not a safety issue.
 // ─────────────────────────────────────────────────────────────────────────────
 #pragma once
 #include <stdint.h>
@@ -101,6 +106,13 @@ struct FrameMonEntry {
 #define FRAME_MON_SLOTS 64
 extern FrameMonEntry g_frame_mon[2][FRAME_MON_SLOTS];  // [BUS_A/BUS_B][slot]
 
+// Count of distinct CAN IDs seen (per bus, on top of the FRAME_MON_SLOTS
+// already tracked) that could NOT be given a slot because the table was full
+// — i.e. IDs silently dropped from the frame monitor. 0 when nothing has been
+// dropped. Same lock-free style as the rest of this file: a plain 32-bit
+// counter, written only by the CAN-pump task, read cross-task as a scalar.
+extern uint32_t g_frame_mon_dropped[2];  // [BUS_A/BUS_B]
+
 // One-time sentinel init (-1 = "not yet known" fields). Call once from
 // bridge_begin(), before any frames are pumped.
 void telemetry_begin();
@@ -114,3 +126,13 @@ void telemetry_capture(BridgeBus from, const BridgeFrame &f);
 // quiet (age > 3000 ms) we assume bench/bringup and allow; otherwise the
 // car must be confirmed stationary and in Park.
 bool car_write_safe();
+
+// Stricter interlock for the ONLY path that actually writes CAN frames to the
+// vehicle bus (the dashboard's custom-CAN-transmit command). Unlike
+// car_write_safe(), a silent/absent CAN bus does NOT unlock this one — with
+// no live traffic we cannot confirm the car is parked, so we must refuse.
+// Returns true only on POSITIVE confirmation: fresh vehicle-side data
+// (t_vehicle_ms within 3000 ms) AND car_state != STATE_DRIVING AND
+// speed_kmh < 2.0 AND gear == P. Callable from any task — reads only plain
+// scalar fields (see concurrency note above).
+bool can_tx_safe();

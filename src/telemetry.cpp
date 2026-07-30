@@ -4,6 +4,19 @@
 
 Telemetry g_telemetry = {};
 FrameMonEntry g_frame_mon[2][FRAME_MON_SLOTS] = {};
+uint32_t g_frame_mon_dropped[2] = {};
+
+// Side table remembering which dropped IDs have already been counted, so
+// g_frame_mon_dropped[] counts DISTINCT dropped IDs rather than every frame
+// that arrives once the table is full. Bounded (not a hash set) — cheap and
+// enough in practice: real buses have a small, fixed set of distinct IDs, so
+// overflowing FRAME_MON_SLOTS(64) *and* this table implies a genuinely
+// pathological bus. Beyond capacity we stop deduping (an already-rare edge
+// case) rather than pay for unbounded tracking; the counter still only ever
+// undercounts, never over.
+#define DROPPED_ID_TRACK_SLOTS 32
+static uint32_t g_dropped_id_seen[2][DROPPED_ID_TRACK_SLOTS];
+static uint32_t g_dropped_id_seen_count[2];
 
 void telemetry_begin() {
   g_telemetry.battery_bus     = -1;   // unknown until 0x55B is seen
@@ -59,7 +72,20 @@ static void mon_update(BridgeBus bus, const BridgeFrame &f, uint32_t now) {
     if (!tbl[i].used && free_slot < 0) free_slot = i;
   }
   if (slot < 0) {
-    if (free_slot < 0) return;  // table full — drop new IDs
+    if (free_slot < 0) {
+      // Table full — this ID has no slot. Count it once per distinct ID.
+      uint32_t *seen = g_dropped_id_seen[bus];
+      uint32_t seen_count = g_dropped_id_seen_count[bus];
+      for (uint32_t i = 0; i < seen_count; i++) {
+        if (seen[i] == f.id) return;  // already counted
+      }
+      if (seen_count < DROPPED_ID_TRACK_SLOTS) {
+        seen[seen_count] = f.id;
+        g_dropped_id_seen_count[bus] = seen_count + 1;
+      }
+      g_frame_mon_dropped[bus]++;
+      return;
+    }
     slot = free_slot;
     tbl[slot].id = f.id;
     tbl[slot].count = 0;
@@ -231,6 +257,23 @@ bool car_write_safe() {
   // bus keeps last_rx fresh, we CANNOT confirm the car is parked — refuse to
   // write (lock) rather than trust frozen gear=P/speed=0 defaults. This closes
   // the "battery live, vehicle link dropped mid-drive" hole.
+  const uint32_t t_veh = g_telemetry.t_vehicle_ms;
+  const uint32_t veh_age = t_veh ? (now - t_veh) : UINT32_MAX;
+  if (veh_age > 3000) return false;  // no fresh vehicle data -> can't confirm parked
+
+  return (g_telemetry.car_state != STATE_DRIVING) &&
+         (g_telemetry.speed_kmh < 2.0f) &&
+         (g_telemetry.gear == 0 /* P */);
+}
+
+bool can_tx_safe() {
+  const uint32_t now = millis();
+  // Unlike car_write_safe(), a silent bus is NOT treated as bench/bringup
+  // here: this is the interlock for the one path that actually puts frames
+  // on the vehicle CAN bus, so "cannot confirm" must mean "refuse", not
+  // "allow". A parked car with the ignition off may itself go CAN-silent —
+  // that case, too, must refuse (we have no way to distinguish it from a
+  // live car whose vehicle-side messages have simply stopped arriving).
   const uint32_t t_veh = g_telemetry.t_vehicle_ms;
   const uint32_t veh_age = t_veh ? (now - t_veh) : UINT32_MAX;
   if (veh_age > 3000) return false;  // no fresh vehicle data -> can't confirm parked

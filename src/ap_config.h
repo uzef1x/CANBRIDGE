@@ -9,14 +9,18 @@
 // ─────────────────────────────────────────────────────────────────────────────
 #pragma once
 
-// Load the persisted password (or the default) into a static buffer. Call
-// once, before webui_begin() — i.e. from setup()/bridge_begin(), not from
-// inside webui_begin() itself, since Part D defers webui_begin() to after
-// the first loop() pass.
+// Load the persisted password into a static buffer, generating and storing a
+// random per-device default on first boot (no user password has ever been
+// set). Call once, before webui_begin() — i.e. from setup()/bridge_begin(),
+// not from inside webui_begin() itself, since Part D defers webui_begin() to
+// after the first loop() pass. Prints the in-effect password to the boot log
+// every boot (this is how a first-time user learns a generated password).
 void ap_config_begin();
 
-// Returns the stored AP password, or "canbridge123" if unset/invalid (<8
-// chars). Pointer to a static buffer, valid for the process lifetime.
+// Returns the stored AP password: a user-set password if one was ever
+// stored via ap_password_store(), otherwise the random per-device default
+// generated on first boot. Pointer to a static buffer, valid for the
+// process lifetime.
 const char *ap_password();
 
 // Persist a new AP password. Validates length 8..63; no-op (returns false)
