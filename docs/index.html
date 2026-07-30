@@ -92,7 +92,7 @@ while clicking Connect, and release it once erasing/installing starts.</p>
 
 <esp-web-install-button></esp-web-install-button>
 
-<h2>Step 5: Select the vehicle</h2>
+<h2>Step 5: Select the profile</h2>
 
 <p>One firmware serves both cars; the choice is stored on the device and read
 at boot. <b>Close the installer dialog first</b> (it holds the serial port),
@@ -101,13 +101,15 @@ then click:</p>
 <p>
 <button class="vehicle" id="btn-leaf">Nissan LEAF</button>
 <button class="vehicle" id="btn-env200">Nissan e-NV200</button>
+<button class="vehicle" id="btn-monitor">Monitor (pass-through)</button>
 </p>
 
 <pre id="serial-log">Device output appears here.</pre>
 
 <p class="note">After the device confirms the choice was stored, press its
 <b>RST</b> button (or unplug/replug) — the selection takes effect on the next
-boot. Default is LEAF.</p>
+boot. The default — before any selection is made — is Monitor: a safe
+pass-through that modifies nothing.</p>
 
 </div>
 
@@ -229,6 +231,7 @@ async function sendVehicle(cmd) {
 
 document.getElementById("btn-leaf").addEventListener("click", () => sendVehicle("leaf"));
 document.getElementById("btn-env200").addEventListener("click", () => sendVehicle("env200"));
+document.getElementById("btn-monitor").addEventListener("click", () => sendVehicle("monitor"));
 </script>
 
 </body>

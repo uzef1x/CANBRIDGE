@@ -102,8 +102,10 @@ needed:
 - **Open** <http://10.0.0.1:8080> in a phone or laptop browser. The explicit `:8080` port stops browsers from silently upgrading the address to HTTPS (which the bridge cannot serve); plain <http://10.0.0.1> also works, except in browsers that force an HTTPS upgrade for all sites. The AP answers the OS connectivity checks, so phones treat it as a normal network and route to the bridge over WiFi.
 
 Features:
-- Status bar: vehicle (LEAF/e-NV200), car state (Idle/Driving/Charging/Asleep), which
-  bus is the battery, WebSocket connection state, uptime.
+- Status bar: active profile (LEAF / e-NV200 / Monitor), car state
+  (Idle/Driving/Charging/Asleep), which bus is the battery, WebSocket connection
+  state, uptime — plus a "Detected" field showing the wire-confirmed car
+  generation and battery size (battery only in Monitor mode).
 - Battery tiles: SOC, GIDs/kWh, SOH, pack voltage/current/power, temperature,
   charge/discharge power limits, relay/failsafe status, DTC.
 - Drive tiles: speed (approx), gear, ECO, torque, inverter voltage.
@@ -146,8 +148,10 @@ another profile:
   translation is fixed for that swap.
 
 To change the profile: use the web dashboard's Profile dropdown, or send
-`leaf`, `env200` or `monitor` over the serial monitor (115200). The choice is
-stored in NVS, applied at the next reboot, and never swapped mid-run.
+`leaf`, `env200` or `monitor` over the serial monitor (115200). Both paths
+refuse the change unless the car is parked (or the bus is silent, as on a
+bench). The choice is stored in NVS, applied at the next reboot, and never
+swapped mid-run.
 
 ## Flash from a web browser
 
@@ -166,7 +170,7 @@ src/vehicle_config.{h,cpp} runtime LEAF/e-NV200 selection (NVS-persisted)
 src/nissan_crc.{h,cpp}    CRC-8 (0x85) + calc_sum2 / calc_checksum4
 src/leaf_5bc.h            0x5BC model + pack/unpack
 src/leaf_5c0.h            0x5C0 temperature model + pack
-src/leaf_translation.{h,cpp}    full LEAF battery-upgrade translation
+src/leaf_translation.{h,cpp}    full LEAF battery-upgrade translation + read-only detection (Monitor)
 src/env200_translation.{h,cpp}  e-NV200 (24→40 kWh) translation
 src/telemetry.{h,cpp}     read-only decoded-state tap for the web dashboard
 src/leaf_diag.{h,cpp}     OBD-style battery diagnostic polling (0x79B/0x7BB) for the dashboard
