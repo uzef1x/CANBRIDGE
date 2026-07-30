@@ -14,6 +14,7 @@
 #include "leaf_5bc.h"
 #include "webui.h"
 #include "vehicle_config.h"
+#include "can_bus.h"
 #include "fw_version.h"
 
 // Task watchdog (2 s, panic-reboot) is configured, the core-0 IDLE subscription
@@ -72,5 +73,6 @@ void loop() {
   // bridge).
   vehicle_serial_task();
   webui_housekeeping();
+  canbus_housekeeping();  // persists a detected CAN-A oscillator (NVS write)
   delay(5);  // yield to the CAN task, AsyncTCP, and IDLE (feeds the IDLE WDT)
 }

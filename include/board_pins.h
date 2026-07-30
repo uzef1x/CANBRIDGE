@@ -20,9 +20,10 @@
 #define MCP2518_CS_GPIO   10
 #define MCP2518_INT_GPIO  8   // primary interrupt line (INT_0=9, INT_1=3 spare)
 
-// MCP2518FD oscillator: 20 MHz — confirmed via LilyGo's example, which calls
-// Longan mcp2518fd::begin() with the default clockset = MCP2518FD_20MHz.
-#define MCP2518_OSC_HZ  (20UL * 1000UL * 1000UL)
+// MCP2518FD oscillator: LilyGo's example implies 20 MHz (Longan
+// mcp2518fd::begin() default clockset = MCP2518FD_20MHz) but their schematic
+// prints a 40 MHz crystal, and the boards are not consistent. Not a constant:
+// can_bus.cpp detects it at first run and remembers it in NVS.
 
 // Both Nissan CAN segments
 #define CAN_BITRATE     (500UL * 1000UL)

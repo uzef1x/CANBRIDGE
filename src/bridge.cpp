@@ -75,6 +75,8 @@ static TaskHandle_t g_can_task = nullptr;
 static void can_task(void *) {
   esp_task_wdt_add(NULL);  // watch THIS task (a stuck SPI/TWAI TX -> reboot)
   for (;;) {
+    canbus_poll();  // CAN-A oscillator detection (no-op once locked / restored)
+
     if (vehicle_active() == VEHICLE_LEAF) leaf_tick();
 
     pump(BUS_A, BUS_B, g_a_to_b);
