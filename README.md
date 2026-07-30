@@ -160,9 +160,10 @@ swapped mid-run.
 ## Flash from a web browser
 
 Open **<https://uzef1x.github.io/CANBRIDGE/>** in Chrome or Edge, plug the board in
-over USB-C and click Install — the page always flashes the latest firmware. After
-flashing, the same page can set the profile (LEAF / e-NV200 / Monitor) over Web
-Serial.
+over USB-C and click Install — the page always flashes the latest firmware. The
+page can then show the board's serial output, which is where you read the WiFi
+password it generated. Nothing else needs configuring: the bridge starts in
+Monitor, and the profile is set later from its dashboard.
 
 ## Code layout
 

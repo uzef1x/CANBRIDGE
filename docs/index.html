@@ -88,24 +88,22 @@ Power it from USB only while flashing (no 12&nbsp;V on VIN).</p>
 
 <esp-web-install-button></esp-web-install-button>
 
-<h2>Step 3: Select the profile</h2>
+<h2>Step 3: Read the WiFi password</h2>
 
-<p>One firmware serves both cars; the choice is stored on the device and read
-at boot. <b>Close the installer dialog first</b> (it holds the serial port),
-then click:</p>
+<p>The bridge creates its own WiFi network with a password unique to your
+device, printed on its serial output. <b>Close the installer dialog first</b>
+(it holds the serial port), then click below and press the board's <b>RST</b>
+button — the password appears in the line
+<code>[webui] AP 'CANBRIDGE' password: …</code></p>
 
-<p>
-<button class="vehicle" id="btn-leaf">Nissan LEAF</button>
-<button class="vehicle" id="btn-env200">Nissan e-NV200</button>
-<button class="vehicle" id="btn-monitor">Monitor (pass-through)</button>
-</p>
+<p><button class="vehicle" id="btn-serial">Show device output</button></p>
 
 <pre id="serial-log">Device output appears here.</pre>
 
-<p class="note">After the device confirms the choice was stored, press its
-<b>RST</b> button (or unplug/replug) — the selection takes effect on the next
-boot. The default — before any selection is made — is Monitor: a safe
-pass-through that modifies nothing.</p>
+<p class="note">Nothing else needs configuring. The bridge starts in
+<b>Monitor</b> — a safe pass-through that changes nothing on the CAN bus — and
+you pick the LEAF or e-NV200 profile later from its dashboard, once it is
+installed in the car.</p>
 
 </div>
 
@@ -170,10 +168,12 @@ fetch("https://api.github.com/repos/" + REPO + "/git/trees/main?recursive=1")
         fwLine.textContent = "Failed to load the firmware list — reload the page.";
     });
 
-// ── Vehicle selection over Web Serial ───────────────────────────────────────
+// ── Read the device's serial output (Web Serial) ────────────────────────────
+// The generated AP password is printed at boot and again ~5 s in, so a user
+// with no serial terminal can still learn it here.
 let port = null;
 
-async function sendVehicle(cmd) {
+async function showSerial() {
     const log = document.getElementById("serial-log");
     if (!("serial" in navigator)) {
         log.textContent = "Web Serial is not supported — use Chrome or Edge.";
@@ -184,26 +184,22 @@ async function sendVehicle(cmd) {
             port = await navigator.serial.requestPort();
             await port.open({ baudRate: 115200 });
         }
-        const writer = port.writable.getWriter();
-        await writer.write(new TextEncoder().encode(cmd + "\n"));
-        writer.releaseLock();
-        log.textContent = "> " + cmd + "\n";
-
-        // Show the device's reply for a couple of seconds.
+        log.textContent = "Listening… press the board's RST button.\n";
         const reader = port.readable.getReader();
         const dec = new TextDecoder();
-        const timer = setTimeout(() => reader.cancel().catch(() => {}), 2500);
+        const timer = setTimeout(() => reader.cancel().catch(() => {}), 30000);
         try {
             for (;;) {
                 const { value, done } = await reader.read();
                 if (done) break;
                 log.textContent += dec.decode(value);
+                log.scrollTop = log.scrollHeight;
             }
         } finally {
             clearTimeout(timer);
             reader.releaseLock();
         }
-        log.textContent += "\n(now press RST or replug the board)";
+        log.textContent += "\n(stopped listening — click again to resume)";
     } catch (e) {
         log.textContent = "Serial error: " + e.message +
             "\nIf the installer dialog is still open, close it and try again.";
@@ -212,9 +208,7 @@ async function sendVehicle(cmd) {
     }
 }
 
-document.getElementById("btn-leaf").addEventListener("click", () => sendVehicle("leaf"));
-document.getElementById("btn-env200").addEventListener("click", () => sendVehicle("env200"));
-document.getElementById("btn-monitor").addEventListener("click", () => sendVehicle("monitor"));
+document.getElementById("btn-serial").addEventListener("click", showSerial);
 </script>
 
 </body>
