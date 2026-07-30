@@ -56,9 +56,12 @@ pre#serial-log {
     color: #555;
 }
 </style>
+<!-- esp-web-tools 10.4.0, vendored into this repo (docs/vendor/esp-web-tools/)
+     so the installer does not depend on an external CDN being reachable or
+     untampered. Update by re-fetching that version's dist/web/ chunk set. -->
 <script
   type="module"
-  src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
+  src="./vendor/esp-web-tools/install-button.js"
 ></script>
 </head>
 <body>

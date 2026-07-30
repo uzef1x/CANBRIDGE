@@ -52,6 +52,25 @@ jobs:
             0xe000  "$BOOT_APP0" \
             0x10000 "$BUILD/firmware.bin"
 
+      # Refuse to publish an image that cannot boot. Byte 3 of the ESP32 image
+      # header encodes flash size/mode; a wrong value here is exactly what made
+      # every image before v1.2.0 boot-loop silently. 0x4F = 16 MB, what this
+      # board's partition table requires. Also check the magic byte and that the
+      # app partition actually contains our firmware.
+      - name: Verify image before publishing
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          IMG="$RUNNER_TEMP/CANBRIDGE_${VERSION}.factory.bin"
+          MAGIC=$(xxd -p -l1 -s0 "$IMG")
+          HDR=$(xxd -p -l1 -s3 "$IMG")
+          echo "image magic=0x$MAGIC header[3]=0x$HDR"
+          test "$MAGIC" = "e9" || { echo "::error::not an ESP32 image (magic 0x$MAGIC)"; exit 1; }
+          test "$HDR" = "4f"   || { echo "::error::flash-size header 0x$HDR != 0x4f (16MB) — this image would not boot"; exit 1; }
+          python ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32s3 image_info "$IMG" > /dev/null
+          # Fingerprint so anyone can verify the download.
+          (cd "$RUNNER_TEMP" && sha256sum "CANBRIDGE_${VERSION}.factory.bin" > "CANBRIDGE_${VERSION}.factory.bin.sha256")
+          cat "$RUNNER_TEMP/CANBRIDGE_${VERSION}.factory.bin.sha256"
+
       - name: Commit image to main
         run: |
           VERSION="${{ github.event.inputs.version || github.ref_name }}"
@@ -61,6 +80,7 @@ jobs:
           git checkout -B main origin/main
           mkdir -p "images/${VERSION}"
           cp "$RUNNER_TEMP/CANBRIDGE_${VERSION}.factory.bin" "images/${VERSION}/"
+          cp "$RUNNER_TEMP/CANBRIDGE_${VERSION}.factory.bin.sha256" "images/${VERSION}/"
           git add images
           git commit -m "CI: firmware image ${VERSION}"
           git push origin main
