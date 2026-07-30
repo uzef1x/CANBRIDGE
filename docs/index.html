@@ -67,32 +67,25 @@ pre#serial-log {
 
 <p>Nissan LEAF / e-NV200 battery-upgrade CAN bridge for the
 <b>LilyGo T-2CANFD (ESP32-S3)</b>. This page flashes the firmware over USB
-from a Chrome or Edge browser — no toolchain needed.</p>
+from a Chrome or Edge browser.</p>
 
 <h2>Step 1: Attach the board</h2>
 
 <p>Plug the LilyGo T-2CANFD into your computer with a USB-C cable.
 Power it from USB only while flashing (no 12&nbsp;V on VIN).</p>
 
-<h2>Step 2: Hold BOOT (if needed)</h2>
-
-<p>If the device is not detected in the next step, hold the <b>BOOT</b> button
-while clicking Connect, and release it once erasing/installing starts.</p>
-
-<h2>Step 3: Choose a release</h2>
-
-<p><select id="release"><option value="">Loading releases…</option></select></p>
+<p id="fw-line">Loading the latest firmware…</p>
 
 <div id="install" style="display: none">
 
-<h2>Step 4: Install</h2>
+<h2>Step 2: Install</h2>
 
 <p>Click the button, pick your board's serial port, and choose
 <b>Install</b>. Select "Erase device" on a first-time install.</p>
 
 <esp-web-install-button></esp-web-install-button>
 
-<h2>Step 5: Select the profile</h2>
+<h2>Step 3: Select the profile</h2>
 
 <p>One firmware serves both cars; the choice is stored on the device and read
 at boot. <b>Close the installer dialog first</b> (it holds the serial port),
@@ -113,9 +106,13 @@ pass-through that modifies nothing.</p>
 
 </div>
 
+<h2>Troubleshooting</h2>
+
+<p>If the device is not detected when connecting, hold the <b>BOOT</b> button
+while clicking Connect, and release it once erasing/installing starts.</p>
+
 <p class="note">Firmware source:
-<a href="https://github.com/uzef1x/CANBRIDGE">github.com/uzef1x/CANBRIDGE</a>
-(GPL-3.0, derived from dalathegreat's battery-upgrade bridges).</p>
+<a href="https://github.com/uzef1x/CANBRIDGE">github.com/uzef1x/CANBRIDGE</a></p>
 
 <script>
 const REPO = "uzef1x/CANBRIDGE";
@@ -124,7 +121,7 @@ const RAW  = "https://raw.githubusercontent.com/" + REPO + "/main/";
 // images/<version>/<name>.factory.bin — one merged image per release
 const image_by_version = {};
 
-const sel = document.getElementById("release");
+const fwLine = document.getElementById("fw-line");
 fetch("https://api.github.com/repos/" + REPO + "/git/trees/main?recursive=1")
     .then(r => r.json())
     .then(r => {
@@ -135,7 +132,6 @@ fetch("https://api.github.com/repos/" + REPO + "/git/trees/main?recursive=1")
             }
         });
 
-        sel.innerHTML = "";
         const versions = Object.keys(image_by_version).sort((a, b) => {
             const pa = a.replace(/^v/, "").split(".").map(Number);
             const pb = b.replace(/^v/, "").split(".").map(Number);
@@ -147,45 +143,29 @@ fetch("https://api.github.com/repos/" + REPO + "/git/trees/main?recursive=1")
         });
 
         if (!versions.length) {
-            sel.innerHTML = "<option value=''>No releases published yet</option>";
+            fwLine.textContent = "No firmware published yet.";
             return;
         }
 
-        const opt = document.createElement("option");
-        opt.value = "";
-        opt.textContent = "Select…";
-        sel.appendChild(opt);
-        versions.forEach(v => {
-            const o = document.createElement("option");
-            o.value = v;
-            o.textContent = v + (v === versions[0] ? "  (latest)" : "");
-            sel.appendChild(o);
-        });
+        const latest = versions[0];
+        const manifest = {
+            "name": "CANBRIDGE",
+            "version": latest,
+            "new_install_prompt_erase": true,
+            "builds": [{
+                "chipFamily": "ESP32-S3",
+                "improv": false,
+                "parts": [{ "path": RAW + image_by_version[latest], "offset": 0 }]
+            }]
+        };
+        const blob = new Blob([JSON.stringify(manifest)], { type: "application/json" });
+        document.querySelector("esp-web-install-button").manifest = URL.createObjectURL(blob);
+        fwLine.innerHTML = "Firmware: <b>" + latest + "</b>";
+        document.getElementById("install").style.display = "block";
     })
     .catch(() => {
-        sel.innerHTML = "<option value=''>Failed to load release list</option>";
+        fwLine.textContent = "Failed to load the firmware list — reload the page.";
     });
-
-sel.addEventListener("change", () => {
-    const path = image_by_version[sel.value];
-    if (!path) {
-        document.getElementById("install").style.display = "none";
-        return;
-    }
-    const manifest = {
-        "name": "CANBRIDGE",
-        "version": sel.value,
-        "new_install_prompt_erase": true,
-        "builds": [{
-            "chipFamily": "ESP32-S3",
-            "improv": false,
-            "parts": [{ "path": RAW + path, "offset": 0 }]
-        }]
-    };
-    const blob = new Blob([JSON.stringify(manifest)], { type: "application/json" });
-    document.querySelector("esp-web-install-button").manifest = URL.createObjectURL(blob);
-    document.getElementById("install").style.display = "block";
-});
 
 // ── Vehicle selection over Web Serial ───────────────────────────────────────
 let port = null;

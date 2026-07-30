@@ -156,8 +156,9 @@ swapped mid-run.
 ## Flash from a web browser
 
 Open **<https://uzef1x.github.io/CANBRIDGE/>** in Chrome or Edge, plug the board in
-over USB-C, pick a release and click Install. The page also selects the vehicle
-(LEAF / e-NV200) over Web Serial after flashing.
+over USB-C and click Install — the page always flashes the latest firmware. After
+flashing, the same page can set the profile (LEAF / e-NV200 / Monitor) over Web
+Serial.
 
 ## Code layout
 
