@@ -19,11 +19,7 @@ PARTICULAR PURPOSE, AND NONINFRINGEMENT. Sections 15 ("Disclaimer of Warranty") 
 16 ("Limitation of Liability") of the [GPL-3.0 license](LICENSE) apply to this entire
 project. If you do not agree, do not use it.
 
-This controls a real vehicle. It has been **compile-verified** and the translation was
-**independently cross-checked against dala's source**, but it has **not been tested on
-hardware or in a car**. First bring-up must be on a bench (CAN analyzer / replayed
-logs), then in-car with the ability to revert to a plain pass-through. Modifying a
-vehicle's CAN bus can immobilise the car.
+## About
 
 A clean ESP32 reimplementation of dalathegreat's battery-upgrade CAN bridge — the
 job the Muxsan 3-port and STM32 2-port bridges do — for **both** the Nissan LEAF and
@@ -86,22 +82,12 @@ matter — the firmware auto-detects.
 ![T-2CANFD underside with per-pin CAN labels](docs/hardware/t2canfd_bottom_can_labels.jpg)
 
 **Top — the two black 4-pin screw blocks (top edge) are the CAN ports.** At the
-opposite end: USB-C (bench/flashing), the two small JST sockets (UART/GPIO — not
-CAN, leave empty), the `12–24V` power screw terminal with `GND` marked beside it,
-and a 2-position DIP switch (not in the vendor schematic — function unverified,
-leave as shipped).
+opposite end: the `12–24V` power screw terminal with `GND` marked beside it.
 
 ![T-2CANFD top side](docs/hardware/t2canfd_top.jpg)
 
-**Oscillator auto-detection.** The MCP2518FD crystal is either 20 MHz or 40 MHz
-depending on the board, and the wrong choice halves or doubles CAN-A's bit rate so
-it hears nothing. The firmware sorts this out itself: on first run it alternates
-trial configurations until real frames arrive, prints `[can_a] oscillator
-auto-detected: 40 MHz`, and stores the result, so every later boot goes straight to
-`[can_a] using saved 40 MHz oscillator`. The trials only listen and acknowledge —
-they never transmit, so detection is safe on a live bus. Detection keeps waiting
-harmlessly if CAN-A is silent, and CAN-B, the web dashboard and the rest of the
-bridge are unaffected throughout.
+The MCP2518FD oscillator (20 or 40 MHz, board-dependent) is **auto-detected** on
+first run and remembered — nothing to configure.
 
 ## Web dashboard
 The bridge runs a WiFi soft-AP + live telemetry dashboard, no phone app or toolchain
@@ -140,6 +126,15 @@ from the WiFi/web task — the CAN drivers are not thread-safe.
 ## Selecting the vehicle
 Choice is stored in NVS and read once at boot (never swapped mid-run). Over the serial
 monitor (115200) send `leaf` or `env200`, then reboot. Default is LEAF.
+
+What each profile covers:
+
+- **LEAF** — many combinations exist, so the firmware auto-detects them from the
+  CAN traffic: the car's generation (ZE0 / AZE0) and the installed battery
+  (24 / 30 / 40 / 62 kWh). No battery-specific configuration is needed.
+- **e-NV200** — only one option: the van only ever shipped with 24 or 40 kWh,
+  so the bridge does the **24 → 40 kWh upgrade** only. Nothing is auto-detected;
+  the translation is fixed for that swap.
 
 ## Code layout
 ```
