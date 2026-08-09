@@ -296,7 +296,7 @@ function render(d){
   $('uptime').textContent=Math.floor(d.uptime_ms/1000)+'s';
   $('heap').textContent=(d.free_heap/1024).toFixed(1)+'KB';
 
-  var soc = d.usable_soc_pct>=0 ? d.usable_soc_pct : (d.soc_tenth_pct/10);
+  var soc = d.usable_soc_pct>0 ? d.usable_soc_pct : (d.soc_tenth_pct/10);  // 0 = field absent (older cars send zeros); genuine empty still shows via the 0.1% SOC
   $('soc').textContent=fmt(soc,1)+'%';
   $('socRaw').textContent='0.1% raw: '+fmt(d.soc_tenth_pct/10,1)+'%';
   $('gids').textContent=d.gids>=0?d.gids:'--';

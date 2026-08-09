@@ -379,7 +379,7 @@ static void build_cells_message(char *buf, size_t buflen) {
   for (int i = 0; i < 4 && n < (int)buflen; i++) {
     n += snprintf(buf + n, buflen - n, "%s%s", i ? "," : "",
                   (ld.temp_c[i] <= -1000) ? "null" : "");
-    if (ld.temp_c[i] > -1000) n += snprintf(buf + n, buflen - n, "%ld", (long)ld.temp_c[i]);
+    if (ld.temp_c[i] > -1000) n += snprintf(buf + n, buflen - n, "%.1f", (double)ld.temp_c[i] / 10.0);  // temp_c[] is deci-°C
   }
   const uint32_t now = millis();
   const uint32_t age_s = (ld.last_poll_ok_ms == 0) ? 0 : (now - ld.last_poll_ok_ms) / 1000;
