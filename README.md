@@ -110,6 +110,7 @@ Features:
   generation and battery size (battery only in Monitor mode).
 - Battery tiles: SOC, GIDs/kWh, SOH, pack voltage/current/power, temperature,
   charge/discharge power limits, relay/failsafe status, DTC.
+- Charging tiles: Charger, Charger voltage, Current to battery, Charge power, EVSE limit, and Charger status on cars that send it.
 - Drive tiles: speed (approx), gear, ECO, torque, inverter voltage.
 - Rolling ~15 s sparkline charts for power, SOC, and temperature.
 - **Battery cells** section: polls the LBC the same way an OBD diagnostic dongle does

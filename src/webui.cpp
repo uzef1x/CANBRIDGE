@@ -312,6 +312,7 @@ static void build_snapshot(char *buf, size_t buflen) {
     "\"lb_failsafe_status\":%ld,\"lb_relay_cut_request\":%ld,\"lb_main_relay_on\":%ld,"
     "\"torque_nm\":%.1f,\"inverter_voltage_v\":%.0f,\"gear\":%ld,\"eco_on\":%ld,"
     "\"speed_kmh\":%.1f,\"charge_power_kw\":%.2f,\"target_soc_80\":%ld,\"vcm_awake\":%ld,"
+    "\"obc_power_kw_ze0\":%.2f,\"ac_voltage_v\":%.1f,\"evse_limit_a\":%.1f,\"qc_voltage_v\":%.1f,\"obc_power_kw_aze0\":%.2f,\"obc_charge_status\":%ld,\"ac_relay\":%ld,\"qc_relay\":%ld,\"t_380_ms\":%lu,\"t_390_ms\":%lu,"
     "\"car_state\":%ld,\"mon_dropped\":%lu,\"frames\":[",
     vehicle_name(vehicle_active()), (unsigned long)millis(), (unsigned long)ESP.getFreeHeap(),
     vehicle_name(vehicle_stored()), detected, car_write_safe() ? 1 : 0, can_tx_safe() ? 1 : 0,
@@ -325,6 +326,9 @@ static void build_snapshot(char *buf, size_t buflen) {
     (long)t.lb_failsafe_status, (long)t.lb_relay_cut_request, (long)t.lb_main_relay_on,
     t.torque_nm, t.inverter_voltage_v, (long)t.gear, (long)t.eco_on,
     t.speed_kmh, t.charge_power_kw, (long)t.target_soc_80, (long)t.vcm_awake,
+    t.obc_power_kw_ze0, t.ac_voltage_v, t.evse_limit_a, t.qc_voltage_v, t.obc_power_kw_aze0, (long)t.obc_charge_status,
+    (long)t.ac_relay, (long)t.qc_relay,
+    (unsigned long)t.t_380_ms, (unsigned long)t.t_390_ms,
     (long)t.car_state,
     (unsigned long)(g_frame_mon_dropped[0] + g_frame_mon_dropped[1]));
 

@@ -23,6 +23,11 @@ void telemetry_begin() {
   g_telemetry.usable_soc_pct  = -1;   // absent on ZE0
   g_telemetry.gids            = -1;   // not yet seen / muxed-out
   g_telemetry.vcm_awake       = -1;   // unknown until 0x50B is seen
+  g_telemetry.ac_voltage_v     = -1;  // no AC measurement until 0x380 seen
+  g_telemetry.evse_limit_a     = -1;  // no EVSE until 0x5BF seen
+  g_telemetry.obc_charge_status = -1; // not yet seen
+  g_telemetry.ac_relay         = -1;  // never seen
+  g_telemetry.qc_relay         = -1;  // never seen
 }
 
 // ── DBC bit extraction ──────────────────────────────────────────────────────
@@ -235,6 +240,56 @@ void telemetry_capture(BridgeBus from, const BridgeFrame &f) {
     case 0x50B: {  // vehicle, 100 ms — VCM wake/sleep
       uint32_t raw = get_le(f.data, 30, 2);
       g_telemetry.vcm_awake = (raw == 3) ? 1 : (raw == 0) ? 0 : -1;
+      g_telemetry.t_vehicle_ms = now;
+      break;
+    }
+
+    case 0x380: {  // vehicle, 10 ms — ZE0-era OBC charge power / AC voltage
+                    // DBC: EV-can_ZE0.dbc, message 0x380
+      g_telemetry.obc_power_kw_ze0 = (float)get_be(f.data, 16, 9) * 0.1f;  // Charger_Output_Power 16|9@0+
+      uint32_t ac_raw = get_be(f.data, 42, 9);  // AC_Voltage 42|9@0+
+      g_telemetry.ac_voltage_v = (ac_raw == 0) ? -1.0f : ((float)ac_raw * 0.5f + 70.0f);
+      // AC/QC relay status, same 0x380 frame. EV-can_ZE0.dbc message 0x380
+      // (message number 896): Normal_Charger_Relay_Status_Flag 38|1@1+,
+      // Quick_Charger_Relay_Status_Flag 37|1@1+ — both signals confirmed
+      // present at these bit positions in the DBC. Wire-validated on a real
+      // ZE0 car during AC charging: byte4 == 0x50 -> AC relay=1, QC relay=0.
+      g_telemetry.ac_relay = (int32_t)get_le(f.data, 38, 1);  // Normal_Charger_Relay_Status_Flag
+      g_telemetry.qc_relay = (int32_t)get_le(f.data, 37, 1);  // Quick_Charger_Relay_Status_Flag
+      g_telemetry.t_380_ms = now;
+      g_telemetry.t_vehicle_ms = now;
+      break;
+    }
+
+    case 0x5BF: {  // vehicle, 10 ms — ZE0-era OBC EVSE (J1772) current limit
+                    // DBC: EV-can_ZE0.dbc, message 0x5BF, signal J1772CurrentLimiter 16|8@1+
+      uint32_t lim_raw = get_le(f.data, 16, 8);
+      g_telemetry.evse_limit_a = (lim_raw == 0) ? -1.0f : ((float)lim_raw * 0.5f);
+      // QC_Voltage 24|8@1+, DBC: EV-can_ZE0.dbc, message 0x5BF. The DBC's own
+      // comment on this signal reads "offset unknown, set to +257 for now" —
+      // treat the +257 offset as tentative. Stored unconditionally every
+      // 0x5BF frame (no absent sentinel — raw value is always "valid data",
+      // just meaningless unless QC is actually active). NOT yet wire-
+      // validated: no DC/QC charging session has been observed on the bench car.
+      g_telemetry.qc_voltage_v = (float)get_le(f.data, 24, 8) + 257.0f;
+      g_telemetry.t_5bf_ms = now;
+      g_telemetry.t_vehicle_ms = now;
+      break;
+    }
+
+    case 0x390: {  // vehicle — AZE0-era OBC charge power / status
+                    // DBC: EV-can_AZE0.dbc, message 0x390
+      g_telemetry.obc_power_kw_aze0 = (float)get_be(f.data, 0, 9) * 0.1f;    // OBC_Charge_Power 0|9@0+
+      g_telemetry.obc_charge_status = (int32_t)get_be(f.data, 46, 6);       // OBC_Charge_Status 46|6@0+
+      // QC relay: EV-can_AZE0.dbc, message 0x390 (message number 912),
+      // signal OBC_Flag_QC_Relay_On_Announcemen 38|1@1+.
+      g_telemetry.qc_relay = (int32_t)get_le(f.data, 38, 1);
+      // AC relay: NOT in the DBC. Per OVMS vehicle_nissanleaf.cpp (not in DBC)
+      // — independently verified against a local copy of that source file
+      // (lines ~1180-1202: `bool ac_state = (d[3] & 0x20) == 0x20;`), i.e.
+      // byte 3 bit 5 = get_le(f.data, 29, 1).
+      g_telemetry.ac_relay = (int32_t)get_le(f.data, 29, 1);
+      g_telemetry.t_390_ms = now;
       g_telemetry.t_vehicle_ms = now;
       break;
     }

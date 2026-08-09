@@ -83,6 +83,24 @@ struct Telemetry {
   int32_t  vcm_awake;                 // 0x50B  1=awake,0=asleep,-1=unknown
   uint32_t t_vehicle_ms;              // last of any vehicle-side frame above
 
+  // 0x380 (vehicle, ZE0-era OBC, 10 ms)
+  float    obc_power_kw_ze0;    // Charger_Output_Power 16|9@0+ x0.1 -> kW
+  float    ac_voltage_v;        // AC_Voltage 42|9@0+ x0.5+70 -> V; raw 0 = no AC measurement -> -1
+  int32_t  ac_relay;            // Normal_Charger_Relay_Status_Flag 38|1@1+; -1 = never seen, else 0/1
+  int32_t  qc_relay;            // Quick_Charger_Relay_Status_Flag 37|1@1+; -1 = never seen, else 0/1
+  uint32_t t_380_ms;
+
+  // 0x5BF (vehicle, ZE0-era OBC, 10 ms)
+  float    evse_limit_a;        // J1772CurrentLimiter 16|8@1+ x0.5 -> A; raw 0 = no EVSE -> -1
+  float    qc_voltage_v;        // QC_Voltage 24|8@1+ x1+257 -> V; always the latest raw decode,
+                                 // meaningless unless qc_relay==1 — no absent sentinel here
+  uint32_t t_5bf_ms;
+
+  // 0x390 (vehicle, AZE0-era OBC)
+  float    obc_power_kw_aze0;   // OBC_Charge_Power 0|9@0+ x0.1 -> kW
+  int32_t  obc_charge_status;   // OBC_Charge_Status 46|6@0+ raw enum; label map lives in webui_page.h; -1 = not yet seen
+  uint32_t t_390_ms;            // ac_relay/qc_relay above are also updated from this frame (AZE0-era)
+
   // derived
   int32_t  car_state;                 // CarState enum below
 };

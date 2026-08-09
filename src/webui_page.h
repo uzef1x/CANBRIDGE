@@ -116,6 +116,16 @@ input[readonly]{opacity:.8}
   <div class="tile"><div class="lbl">Battery DTC</div><div class="val" id="dtc">--</div></div>
 </div>
 
+<h2>Charging</h2>
+<div class="grid">
+  <div class="tile"><div class="lbl">Charger</div><div class="val" id="chgType">--</div></div>
+  <div class="tile"><div class="lbl">Charger voltage</div><div class="val" id="chgV">--</div></div>
+  <div class="tile"><div class="lbl">Current to battery</div><div class="val" id="chgCurrent">--</div></div>
+  <div class="tile"><div class="lbl">Charge power</div><div class="val" id="chgPower">--</div></div>
+  <div class="tile"><div class="lbl">EVSE limit</div><div class="val" id="evseLim">--</div></div>
+  <div class="tile" id="chgStatusTile" style="display:none"><div class="lbl">Charger status</div><div class="val" id="chgStatus">--</div></div>
+</div>
+
 <h2>Drive</h2>
 <div class="grid">
   <div class="tile"><div class="lbl">Speed (approx)</div><div class="val" id="speed">--</div></div>
@@ -317,6 +327,25 @@ function render(d){
   $('relay').textContent='FS:'+d.lb_failsafe_status+' Cut:'+d.lb_relay_cut_request+' On:'+d.lb_main_relay_on;
   var dtcEl=$('dtc'); dtcEl.textContent=d.battery_dtc?('0x'+d.battery_dtc.toString(16)):'none';
   dtcEl.className='val '+(d.battery_dtc?'bad':'');
+
+  var have380=!!d.t_380_ms, have390=!!d.t_390_ms;
+  var chgKw=null;
+  if(have390 && (!have380 || d.t_390_ms>=d.t_380_ms)) chgKw=d.obc_power_kw_aze0;
+  else if(have380) chgKw=d.obc_power_kw_ze0;
+  $('chgPower').textContent = (chgKw===null) ? '--' : fmt(chgKw,2)+' kW';
+  $('evseLim').textContent = d.evse_limit_a>=0 ? fmt(d.evse_limit_a,1)+' A' : '--';
+  if(have390) $('chgStatusTile').style.display='';
+  var chgLabels={1:'Idle/QC',2:'Finished',4:'Charging/interrupted',8:'Idle',9:'Idle',12:'Waiting on timer'};
+  $('chgStatus').textContent = have390 ? (chgLabels[d.obc_charge_status]!==undefined?chgLabels[d.obc_charge_status]:d.obc_charge_status) : '--';
+
+  var ac=d.ac_relay, qc=d.qc_relay, chgType='--';
+  if(ac===1 && qc===1) chgType='AC+DC';
+  else if(ac===1) chgType='AC';
+  else if(qc===1) chgType='DC';
+  else if(ac!==-1 || qc!==-1) chgType='none';
+  $('chgType').textContent=chgType;
+  $('chgV').textContent = ac===1 ? fmt(d.ac_voltage_v,1)+' V' : (qc===1 ? fmt(d.qc_voltage_v,1)+' V' : '--');
+  $('chgCurrent').textContent = (ac===1||qc===1) ? fmt(Math.abs(d.pack_current_a),1)+' A' : '--';
 
   $('speed').textContent=fmt(d.speed_kmh,1)+' km/h';
   var g=['P','?','R','N','D/B'];
