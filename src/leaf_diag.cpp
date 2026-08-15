@@ -74,6 +74,7 @@ static int32_t raw_to_c(uint16_t raw) {
 
 // ── Group-response parse state (main loop task only) ────────────────────────
 static uint8_t  g_group_7bb = 0;
+static uint8_t  g_group_7bb_length = 0;
 
 // group 0x02 — cell voltages
 static uint16_t g_cell_scratch[96];
@@ -132,16 +133,37 @@ static uint8_t pick_next_group() {
 
 // ── 0x7BB parse — mirrors handle_incoming_can_frame() case 0x7BB ────────────
 static void parse_7bb(const uint8_t *d, uint32_t now) {
-  if (d[0] == 0x10) g_group_7bb = d[3];  // first frame of a new group carries the group echo
+  if (d[0] == 0x10) { g_group_7bb = d[3]; g_group_7bb_length = d[1]; }  // first frame of a new group carries the group echo + reply length
 
   switch (g_group_7bb) {
 
-    case 0x01: {  // insulation (frame 0x23) + Hx (frame 0x24) — L402-417
+    case 0x01: {  // insulation (frame 0x23) + Hx (frame 0x24) — L570-601
       if (d[0] == 0x23) {
         g_leaf_diag.insulation_raw = ((uint32_t)d[5] << 8) | d[6];
       }
       if (d[0] == 0x24) {
-        g_leaf_diag.hx_pct = ((float)(((uint32_t)d[4] << 8) | d[5])) / 102.4f;
+        // Hx layout is generation-dependent, selected by the group-1 reply length
+        // announced in the first ISO-TP frame (g_group_7bb_length, captured from
+        // d[1] when d[0]==0x10). Matches upstream Battery-Emulator
+        // NISSAN-LEAF-BATTERY.cpp L570-601 (current main) — replaces the stale
+        // L402-417 reference this section used to cite.
+        if (g_group_7bb_length == 0x35) {
+          // ZE1 40/62 kWh: payload[28..29], raw/102.4 = percent.
+          uint32_t raw = ((uint32_t)d[4] << 8) | d[5];
+          g_leaf_diag.hx_pct = (float)raw / 102.4f;
+        } else if (g_group_7bb_length == 0x29 || g_group_7bb_length == 0x2B) {
+          // ZE0 24 kWh / AZE0 30 kWh: payload[26..27]. Upstream Battery-Emulator
+          // calls this word "hundredths of a percent" (/100); the de-facto
+          // community OBD tooling scales the SAME word by /102.4, and that is
+          // the figure LEAF owners actually quote. Deliberate deviation from
+          // upstream to match: wire-verified 2026-08-15 on the real car — raw
+          // 10000 rendered 100.00% under /100 while the reference tool showed
+          // 97.66% = 10000/102.4 from the same reply.
+          uint32_t raw = ((uint32_t)d[2] << 8) | d[3];
+          g_leaf_diag.hx_pct = (float)raw / 102.4f;
+        }
+        // Any other length (e.g. 0x2C, a ZE1 answering shortly after wakeup) is a
+        // layout we don't know: decode nothing, keep the last good hx_pct value.
         g_leaf_diag.last_poll_ok_ms = now;
       }
       break;
