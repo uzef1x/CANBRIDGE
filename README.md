@@ -101,11 +101,11 @@ needed:
   password on first boot and prints it on the serial console — the web installer
   shows that line right after flashing, e.g. `[webui] AP 'CANBRIDGE' password: …`.
   You can set your own password later from the dashboard's settings.
-- **Open** <http://10.0.0.1:8080> in a phone or laptop browser. The explicit `:8080` port stops browsers from silently upgrading the address to HTTPS (which the bridge cannot serve); plain <http://10.0.0.1> also works, except in browsers that force an HTTPS upgrade for all sites. The AP answers the OS connectivity checks, so phones treat it as a normal network and route to the bridge over WiFi.
+- **Open** `http://10.0.0.1:8080` in a phone or laptop browser. If the page reports itself unreachable while the bridge is clearly running, the browser is silently upgrading the address to HTTPS, which the bridge cannot serve — Chrome does this even for explicitly typed `http://` addresses when its **"Always use secure connections"** setting is on (Chrome ⋮ → Settings → Privacy and security). Turn that setting off, or use a browser without forced HTTPS. Plain `http://10.0.0.1` also works. The AP answers the OS connectivity checks, so phones treat it as a normal network and route to the bridge over WiFi.
 
 Features:
 - Status bar: active profile (LEAF / e-NV200 / Monitor), car state
-  (Idle/Driving/Charging/Asleep), which bus is the battery, WebSocket connection
+  (Idle/Driving/Charging/Discharging/Asleep), which bus is the battery, WebSocket connection
   state, uptime — plus a "Detected" field showing the wire-confirmed car
   generation and battery size (battery only in Monitor mode).
 - Battery tiles: SOC, GIDs/kWh, SOH, pack voltage/current/power, temperature,

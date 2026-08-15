@@ -38,7 +38,9 @@ struct Telemetry {
 
   // 0x1DB (battery, 10 ms)
   float    pack_voltage_v;
-  float    pack_current_a;      // + = discharge
+  float    pack_current_a;      // + = discharge per DBC label, but wire-observed on this car
+                                 // (2026-08-15) to actually be + = charging (into battery) —
+                                 // see update_car_state() for detail; DBC label is wrong for this car
   int32_t  usable_soc_pct;      // -1 = invalid/absent (ZE0)
   int32_t  lb_failsafe_status;
   int32_t  lb_relay_cut_request;
@@ -115,7 +117,7 @@ struct Telemetry {
   int32_t  car_state;                 // CarState enum below
 };
 
-enum CarState { STATE_IDLE = 0, STATE_DRIVING = 1, STATE_CHARGING = 2 };
+enum CarState { STATE_IDLE = 0, STATE_DRIVING = 1, STATE_CHARGING = 2, STATE_DISCHARGING = 3 };
 
 extern Telemetry g_telemetry;
 

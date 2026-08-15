@@ -113,18 +113,57 @@ static void mon_update(BridgeBus bus, const BridgeFrame &f, uint32_t now) {
 
 // ── Derived car state ────────────────────────────────────────────────────────
 static void update_car_state(uint32_t now) {
+  // Debounce state for the non-driving branch only (Idle/Charging/Discharging).
+  // DRIVING always adopts immediately in every path below — can_tx_safe()/
+  // car_write_safe() gate on car_state != STATE_DRIVING, so that transition
+  // must never lag by even one cycle. Both early-return paths below also
+  // reset `pending`/`pending_since` to the state they just wrote, so a stale
+  // debounce candidate can never survive a gap and get adopted instantly the
+  // moment that gate lifts.
+  static int32_t  pending       = STATE_IDLE;
+  static uint32_t pending_since = 0;
+
   const bool vehicle_stale = (g_telemetry.t_vehicle_ms == 0) ||
                              (now - g_telemetry.t_vehicle_ms > 5000);
   if (g_telemetry.vcm_awake == 0 || vehicle_stale) {
-    g_telemetry.car_state = STATE_IDLE;  // "asleep" collapses to idle in the enum;
-    return;                              // webui renders ASLEEP from vcm_awake/staleness directly
+    g_telemetry.car_state = STATE_IDLE;  // asleep/stale collapses to idle, immediate — unchanged from before
+    pending = STATE_IDLE; pending_since = now;
+    return;
   }
-  if (g_telemetry.charge_power_kw > 0.2f || g_telemetry.pack_current_a < -2.0f) {
-    g_telemetry.car_state = STATE_CHARGING;
-  } else if (fabsf(g_telemetry.speed_kmh) > 1.0f || fabsf(g_telemetry.pack_current_a) > 3.0f) {
+
+  // DRIVING: still adopted immediately, now checked before the current-sign
+  // classification — which forces one change from the old condition: the
+  // current-based fallback must be discharge-direction only (< -3 A), because
+  // |current| > 3 would classify AC charging (+4.5 A observed) as DRIVING now
+  // that this branch runs first. Driving discharges; the sign is known
+  // (owner-confirmed, see below). Corner case knowingly accepted: regen with a
+  // dead speed signal reads as charging, not driving — regen implies motion,
+  // motion implies 0x284 speed frames, and can_tx_safe()'s gear==P clause
+  // still gates independently.
+  if (fabsf(g_telemetry.speed_kmh) > 1.0f || g_telemetry.pack_current_a < -3.0f) {
     g_telemetry.car_state = STATE_DRIVING;
-  } else {
-    g_telemetry.car_state = STATE_IDLE;
+    pending = STATE_DRIVING; pending_since = now;
+    return;
+  }
+
+  // Not driving: classify from pack-current sign. Owner-confirmed 2026-08-15
+  // against wire data (+4.5 A while charging, -0.5 A parked): on this car
+  // POSITIVE pack current flows INTO the battery (charging) — the DBC's
+  // "+=discharge" label for this signal is wrong for this car. +/-1.0 A
+  // deadband absorbs idle noise (measured ~0.5 A) so a parked car doesn't
+  // flap between Idle and Discharging.
+  int32_t candidate;
+  if (g_telemetry.pack_current_a > 1.0f)       candidate = STATE_CHARGING;
+  else if (g_telemetry.pack_current_a < -1.0f) candidate = STATE_DISCHARGING;
+  else                                          candidate = STATE_IDLE;
+
+  // 3 s debounce across all of Idle/Charging/Discharging: commanded charge
+  // power and pack current both hover near their thresholds during charge
+  // tapering/wait phases, which flapped the dashboard state chip (user
+  // report 2026-08-15). DRIVING above is exempt — see comment at the top.
+  if (candidate != pending) { pending = candidate; pending_since = now; }
+  if (now - pending_since >= 3000) {
+    g_telemetry.car_state = pending;
   }
 }
 

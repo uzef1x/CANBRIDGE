@@ -50,6 +50,12 @@ static volatile bool g_web_started = false;        // true once webui_begin() ha
 // task) drains it and performs the actual write.
 static volatile int g_pending_profile = -1;  // -1 = none, else Vehicle value
 
+// Set by the AsyncTCP task on WS_EVT_CONNECT, cleared by webui_broadcast() on
+// the Arduino loop task once it has sent a cells message. Same single-flag
+// handoff pattern as g_pending_profile above — the connect handler must not
+// touch shared buffers/CAN/NVS, so it only sets this bool.
+static volatile bool g_cells_replay_pending = false;
+
 // Single-producer (AsyncTCP task) / single-consumer (main loop) handoff for
 // the AP password string. The async side copies the string into the buffer
 // FIRST, then sets pending_appw_ready LAST (release order); the main loop
@@ -196,6 +202,8 @@ static void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
       handle_ws_command(client, data, len);
     }
+  } else if (type == WS_EVT_CONNECT) {
+    g_cells_replay_pending = true;
   }
 }
 
@@ -426,8 +434,11 @@ void webui_broadcast() {
 
   if (ws.count() != 0) {
     static uint32_t last_sent_cells_gen = 0, last_sent_shunts_gen = 0;
-    if (g_leaf_diag.cells_generation != last_sent_cells_gen ||
-        g_leaf_diag.shunts_generation != last_sent_shunts_gen) {
+    bool gen_changed = (g_leaf_diag.cells_generation != last_sent_cells_gen ||
+                         g_leaf_diag.shunts_generation != last_sent_shunts_gen);
+    bool replay = g_cells_replay_pending;
+    if (replay) g_cells_replay_pending = false;
+    if (gen_changed || replay) {
       last_sent_cells_gen  = g_leaf_diag.cells_generation;
       last_sent_shunts_gen = g_leaf_diag.shunts_generation;
       static char cells_buf[1536];

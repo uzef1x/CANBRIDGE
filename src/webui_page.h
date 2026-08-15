@@ -303,7 +303,7 @@ function render(d){
   var canLive = d.can_rx_age_ms>=0 && d.can_rx_age_ms<2000;
   $('dotVeh').className='dot '+(canLive?'on':'off');
   $('canLive').textContent=canLive?'live':'none';
-  var states=['Idle','Driving','Charging'];
+  var states=['Idle','Driving','Charging','Discharging'];
   var stateTxt='-';
   if(canLive){
     stateTxt=states[d.car_state]||'Idle';
@@ -431,13 +431,20 @@ function renderCells(d){
   lastCells=d;
 
   var mv=d.mv;
-  var min=Math.min.apply(null,mv), max=Math.max.apply(null,mv);
-  var minI=mv.indexOf(min), maxI=mv.indexOf(max);
-  var avg=mv.reduce(function(a,b){return a+b;},0)/mv.length;
-  $('cellMin').textContent=min+' mV'; $('cellMinN').textContent='cell '+minI;
-  $('cellMax').textContent=max+' mV'; $('cellMaxN').textContent='cell '+maxI;
-  $('cellAvg').textContent=avg.toFixed(1)+' mV';
-  $('cellSpread').textContent=(max-min)+' mV';
+  if(!d.gen){
+    $('cellMin').textContent='--'; $('cellMinN').textContent='';
+    $('cellMax').textContent='--'; $('cellMaxN').textContent='';
+    $('cellAvg').textContent='--';
+    $('cellSpread').textContent='--';
+  } else {
+    var min=Math.min.apply(null,mv), max=Math.max.apply(null,mv);
+    var minI=mv.indexOf(min), maxI=mv.indexOf(max);
+    var avg=mv.reduce(function(a,b){return a+b;},0)/mv.length;
+    $('cellMin').textContent=min+' mV'; $('cellMinN').textContent='cell '+minI;
+    $('cellMax').textContent=max+' mV'; $('cellMaxN').textContent='cell '+maxI;
+    $('cellAvg').textContent=avg.toFixed(1)+' mV';
+    $('cellSpread').textContent=(max-min)+' mV';
+  }
 
   $('hx').textContent=fmt(d.hx,2)+'%';
   $('insul').textContent=d.insulation;
