@@ -28,6 +28,7 @@ void telemetry_begin() {
   g_telemetry.obc_charge_status = -1; // not yet seen
   g_telemetry.ac_relay         = -1;  // never seen
   g_telemetry.qc_relay         = -1;  // never seen
+  g_telemetry.mg_error         = -1;  // never seen
 }
 
 // ── DBC bit extraction ──────────────────────────────────────────────────────
@@ -209,6 +210,45 @@ void telemetry_capture(BridgeBus from, const BridgeFrame &f) {
 
     case 0x1DA: {  // vehicle, 10 ms — inverter input voltage (AZE0/ZE1)
       g_telemetry.inverter_voltage_v = (float)f.data[0] * 2.0f;
+      // DBC: EV-can_ZE0.dbc, message 0x1DA (474, sender INVmc).
+      // MG_OutputRevolution 39|15@0+ (1,0), range [-16382|16382] — the "+"
+      // marks it unsigned in the DBC, but the signed range shows it's
+      // actually signed; sign-extend it like the rest of this file does.
+      g_telemetry.motor_rpm = sign_extend(get_be(f.data, 39, 15), 15);
+      // MG_EffectiveTorque 18|11@0+ (0.5,0), range [-300|300] — same signed
+      // treatment as MG_OutputRevolution above.
+      g_telemetry.motor_torque_nm = (float)sign_extend(get_be(f.data, 18, 11), 11) * 0.5f;
+      // MG_ErrorCodes 50|6@1+ — raw enum, no DBC value table.
+      g_telemetry.mg_error = (int32_t)get_le(f.data, 50, 6);
+      // Wire sanity check: frame C2 00 18 00 00 01 03 27, captured at
+      // standstill on the real car, decodes to rpm=0, torque=0, errors=0
+      // with the bit extraction above — hand-verified. Weak check: at
+      // standstill all three fields are genuinely zero, so this confirms
+      // bit alignment doesn't pull stray bits into the window, but does NOT
+      // validate scaling or sign handling. Those remain unverified against
+      // live (non-zero) traffic.
+      g_telemetry.t_vehicle_ms = now;
+      break;
+    }
+
+    case 0x55A: {  // vehicle, 10 ms, sender INVmc — motor/inverter temperature
+      // The ZE0 DBC does define this frame, but its interpretation (x0.5 degC
+      // scale, byte4 = motor) failed wire validation — see below. Formula used
+      // instead is the OVMS project's vehicle_nissanleaf.cpp, case 0x55a: raw
+      // bytes are degrees Fahrenheit, converted 5.0/9.0*(d[1]-32) and
+      // 5.0/9.0*(d[2]-32) — independently verified against that source.
+      g_telemetry.motor_temp_c    = ((float)f.data[1] - 32.0f) * 5.0f / 9.0f;
+      g_telemetry.inverter_temp_c = ((float)f.data[2] - 32.0f) * 5.0f / 9.0f;
+      // Wire-validated 2026-08-10 on the real car: cold-start after a 17
+      // degC night read 18.3/15.6 degC (the DBC's x0.5 degC scale would have
+      // implied 30+ degC — refuted); after a short drive byte1 warmed
+      // +3.3 degC and held while byte2 stayed near-static, confirming
+      // byte1=motor, byte2=inverter electronics.
+      //
+      // The DBC's 0x55A signal map is WRONG for this car: its
+      // "MotorTemperature" byte4 field is a constant (0x5F under all
+      // conditions) on this car and is deliberately NOT decoded here.
+      g_telemetry.t_55a_ms = now;
       g_telemetry.t_vehicle_ms = now;
       break;
     }

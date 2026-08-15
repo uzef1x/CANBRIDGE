@@ -111,7 +111,8 @@ Features:
 - Battery tiles: SOC, GIDs/kWh, SOH, pack voltage/current/power, temperature,
   charge/discharge power limits, relay/failsafe status, DTC.
 - Charging tiles: Charger, Charger voltage, Current to battery, Charge power, EVSE limit, and Charger status on cars that send it.
-- Drive tiles: speed (approx), gear, ECO, torque, inverter voltage.
+- Drive tiles: speed (approx), gear, ECO, torque.
+- Inverter tiles: Input voltage, Motor RPM, Actual torque, Error code, Motor temp, Inverter temp.
 - Rolling ~15 s sparkline charts for power, SOC, and temperature.
 - **Battery cells** section: polls the LBC the same way an OBD diagnostic dongle does
   (0x79B/0x7BB diagnostic groups), one group per ~3 s, covering all 96 cell voltages,

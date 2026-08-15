@@ -132,7 +132,16 @@ input[readonly]{opacity:.8}
   <div class="tile"><div class="lbl">Gear</div><div class="val" id="gear">--</div></div>
   <div class="tile"><div class="lbl">ECO</div><div class="val" id="eco">--</div></div>
   <div class="tile"><div class="lbl">Torque</div><div class="val" id="torque">--</div></div>
-  <div class="tile"><div class="lbl">Inverter voltage</div><div class="val" id="invv">--</div></div>
+</div>
+
+<h2>Inverter</h2>
+<div class="grid">
+  <div class="tile"><div class="lbl">Input voltage</div><div class="val" id="invv">--</div></div>
+  <div class="tile"><div class="lbl">Motor RPM</div><div class="val" id="motorRpm">--</div></div>
+  <div class="tile"><div class="lbl">Actual torque</div><div class="val" id="motorTorque">--</div></div>
+  <div class="tile"><div class="lbl">Error code</div><div class="val" id="mgError">--</div></div>
+  <div class="tile"><div class="lbl">Motor temp</div><div class="val" id="motorTemp">--</div></div>
+  <div class="tile"><div class="lbl">Inverter temp</div><div class="val" id="invTemp">--</div></div>
 </div>
 
 <h2>Battery cells</h2>
@@ -353,6 +362,12 @@ function render(d){
   $('eco').textContent=d.eco_on?'ON':'OFF';
   $('torque').textContent=fmt(d.torque_nm,1)+' Nm';
   $('invv').textContent=fmt(d.inverter_voltage_v,0)+' V';
+  $('motorRpm').textContent=fmt(d.motor_rpm,0)+' rpm';
+  $('motorTorque').textContent=fmt(d.motor_torque_nm,1)+' Nm';
+  $('mgError').textContent = d.mg_error<0 ? '--' : (d.mg_error===0 ? 'none' : d.mg_error);
+  var have55a=!!d.t_55a_ms;
+  $('motorTemp').textContent = have55a ? fmt(d.motor_temp_c,1)+' °C' : '--';
+  $('invTemp').textContent = have55a ? fmt(d.inverter_temp_c,1)+' °C' : '--';
 
   push(hist.p,d.pack_power_kw); push(hist.s,soc); push(hist.t,d.temp_avg_c);
   draw('chPower',hist.p); draw('chSoc',hist.s); draw('chTemp',hist.t);

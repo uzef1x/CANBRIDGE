@@ -74,7 +74,11 @@ struct Telemetry {
 
   // vehicle side
   float    torque_nm;                 // 0x1D4
-  float    inverter_voltage_v;        // 0x1DA
+  // 0x1DA (vehicle, 10 ms, inverter input voltage + motor/inverter status)
+  float    inverter_voltage_v;        // Inverter input voltage, raw byte0 x2
+  int32_t  motor_rpm;                 // MG_OutputRevolution 39|15@0+ (signed despite "+")
+  float    motor_torque_nm;           // MG_EffectiveTorque 18|11@0+ (signed despite "+")
+  int32_t  mg_error;                  // MG_ErrorCodes 50|6@1+; -1 = never seen
   int32_t  gear;                      // 0x11A  0=P,2=R,3=N,4=D/B
   int32_t  eco_on;                    // 0x11A
   float    speed_kmh;                 // 0x284 (approx)
@@ -82,6 +86,12 @@ struct Telemetry {
   int32_t  target_soc_80;             // 0x1F2
   int32_t  vcm_awake;                 // 0x50B  1=awake,0=asleep,-1=unknown
   uint32_t t_vehicle_ms;              // last of any vehicle-side frame above
+
+  // 0x55A (vehicle, 10 ms, sender INVmc — motor/inverter temperature)
+  float    motor_temp_c;        // byte1, degF->degC; see telemetry.cpp for provenance
+  float    inverter_temp_c;     // byte2, degF->degC; see telemetry.cpp for provenance
+  uint32_t t_55a_ms;            // 0 = never seen; absence is judged from this, NOT from
+                                 // the float values (winter temps can legitimately be < 0)
 
   // 0x380 (vehicle, ZE0-era OBC, 10 ms)
   float    obc_power_kw_ze0;    // Charger_Output_Power 16|9@0+ x0.1 -> kW

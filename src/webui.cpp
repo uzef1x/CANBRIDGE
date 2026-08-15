@@ -310,7 +310,8 @@ static void build_snapshot(char *buf, size_t buflen) {
     "\"temp_max_c\":%ld,\"temp_avg_c\":%ld,\"temp_min_c\":%ld,\"battery_dtc\":%ld,"
     "\"max_discharge_kw\":%.2f,\"max_charge_kw\":%.2f,"
     "\"lb_failsafe_status\":%ld,\"lb_relay_cut_request\":%ld,\"lb_main_relay_on\":%ld,"
-    "\"torque_nm\":%.1f,\"inverter_voltage_v\":%.0f,\"gear\":%ld,\"eco_on\":%ld,"
+    "\"torque_nm\":%.1f,\"inverter_voltage_v\":%.0f,\"motor_rpm\":%ld,\"motor_torque_nm\":%.1f,\"mg_error\":%ld,"
+    "\"motor_temp_c\":%.1f,\"inverter_temp_c\":%.1f,\"t_55a_ms\":%lu,\"gear\":%ld,\"eco_on\":%ld,"
     "\"speed_kmh\":%.1f,\"charge_power_kw\":%.2f,\"target_soc_80\":%ld,\"vcm_awake\":%ld,"
     "\"obc_power_kw_ze0\":%.2f,\"ac_voltage_v\":%.1f,\"evse_limit_a\":%.1f,\"qc_voltage_v\":%.1f,\"obc_power_kw_aze0\":%.2f,\"obc_charge_status\":%ld,\"ac_relay\":%ld,\"qc_relay\":%ld,\"t_380_ms\":%lu,\"t_390_ms\":%lu,"
     "\"car_state\":%ld,\"mon_dropped\":%lu,\"frames\":[",
@@ -324,7 +325,8 @@ static void build_snapshot(char *buf, size_t buflen) {
     (long)t.temp_max_c, (long)t.temp_avg_c, (long)t.temp_min_c, (long)t.battery_dtc,
     t.max_discharge_kw, t.max_charge_kw,
     (long)t.lb_failsafe_status, (long)t.lb_relay_cut_request, (long)t.lb_main_relay_on,
-    t.torque_nm, t.inverter_voltage_v, (long)t.gear, (long)t.eco_on,
+    t.torque_nm, t.inverter_voltage_v, (long)t.motor_rpm, t.motor_torque_nm, (long)t.mg_error,
+    t.motor_temp_c, t.inverter_temp_c, (unsigned long)t.t_55a_ms, (long)t.gear, (long)t.eco_on,
     t.speed_kmh, t.charge_power_kw, (long)t.target_soc_80, (long)t.vcm_awake,
     t.obc_power_kw_ze0, t.ac_voltage_v, t.evse_limit_a, t.qc_voltage_v, t.obc_power_kw_aze0, (long)t.obc_charge_status,
     (long)t.ac_relay, (long)t.qc_relay,
