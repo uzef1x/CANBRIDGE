@@ -125,7 +125,6 @@ input[readonly]{opacity:.8}
   <div class="tile"><div class="lbl">EVSE limit</div><div class="val" id="evseLim">--</div></div>
   <div class="tile" id="chgStatusTile" style="display:none"><div class="lbl">Charger status</div><div class="val" id="chgStatus">--</div></div>
 </div>
-
 <h2>Drive</h2>
 <div class="grid">
   <div class="tile"><div class="lbl">Speed (approx)</div><div class="val" id="speed">--</div></div>
@@ -156,6 +155,17 @@ input[readonly]{opacity:.8}
     <div class="tile"><div class="lbl">Max cell</div><div class="val" id="cellMax">--</div><div class="sub" id="cellMaxN"></div></div>
     <div class="tile"><div class="lbl">Avg cell</div><div class="val" id="cellAvg">--</div></div>
     <div class="tile"><div class="lbl">Spread (imbalance)</div><div class="val big" id="cellSpread">--</div></div>
+  </div>
+  <div class="chartrow">
+    <div class="tile"><div class="lbl">Within 50 mV</div><div class="val" id="cellImbOk">--</div></div>
+    <div class="chartbox">
+      <div class="lbl">Exceeded 50 mV <button id="histReset" style="float:right">Reset history</button></div>
+      <div class="log" id="cellImbList">none</div>
+    </div>
+    <div class="chartbox">
+      <div class="lbl">Exceeded 150 mV</div>
+      <div class="log" id="cellImbSevereList">none</div>
+    </div>
   </div>
   <div class="grid">
     <div class="tile"><div class="lbl">Hx</div><div class="val" id="hx">--</div></div>
@@ -356,8 +366,9 @@ function render(d){
   $('chgV').textContent = ac===1 ? fmt(d.ac_voltage_v,1)+' V' : (qc===1 ? fmt(d.qc_voltage_v,1)+' V' : '--');
   $('chgCurrent').textContent = (ac===1||qc===1) ? fmt(Math.abs(d.pack_current_a),1)+' A' : '--';
 
+
   $('speed').textContent=fmt(d.speed_kmh,1)+' km/h';
-  var g=['P','?','R','N','D/B'];
+  var g=['P','P','R','N','D/B'];
   $('gear').textContent=g[d.gear]!==undefined?g[d.gear]:d.gear;
   $('eco').textContent=d.eco_on?'ON':'OFF';
   $('torque').textContent=fmt(d.torque_nm,1)+' Nm';
@@ -388,7 +399,7 @@ function render(d){
 
 function applyLock(){
   $('lockBanner').className='lockbanner'+(writeSafe?'':' show');
-  var ids=['profSel','profReboot','apPw','apPwSave','rebootBtn','armSwitch'];
+  var ids=['profSel','profReboot','apPw','apPwSave','rebootBtn','armSwitch','histReset'];
   ids.forEach(function(id){
     var el=$(id);
     if(!el)return;
@@ -440,10 +451,46 @@ function renderCells(d){
     var min=Math.min.apply(null,mv), max=Math.max.apply(null,mv);
     var minI=mv.indexOf(min), maxI=mv.indexOf(max);
     var avg=mv.reduce(function(a,b){return a+b;},0)/mv.length;
-    $('cellMin').textContent=min+' mV'; $('cellMinN').textContent='cell '+minI;
-    $('cellMax').textContent=max+' mV'; $('cellMaxN').textContent='cell '+maxI;
+    $('cellMin').textContent=min+' mV'; $('cellMinN').textContent='cell '+(minI+1);
+    $('cellMax').textContent=max+' mV'; $('cellMaxN').textContent='cell '+(maxI+1);
     $('cellAvg').textContent=avg.toFixed(1)+' mV';
     $('cellSpread').textContent=(max-min)+' mV';
+  }
+
+  var imb=(d.imb||[]).slice().sort(function(a,b){
+    var wa=Math.max(Math.abs(a[1]),a[2]), wb=Math.max(Math.abs(b[1]),b[2]);
+    return (wb-wa)||(b[3]-a[3]);
+  });
+  if(!d.gen){
+    $('cellImbOk').textContent='--';
+    $('cellImbList').textContent='none';
+    $('cellImbSevereList').textContent='none';
+  } else {
+    $('cellImbOk').textContent=(96-imb.length);
+    var normal=imb.filter(function(e){return e[4]<2;});  // severe-latched cells live ONLY in the 150 box
+    if(!normal.length){
+      $('cellImbList').textContent='none';
+    } else {
+      $('cellImbList').innerHTML=normal.map(function(e){
+        var idx=e[0],lo=e[1],hi=e[2],hits=e[3];
+        var parts=[];
+        if(lo!==0)parts.push(lo);
+        if(hi!==0)parts.push((hi>0?'+':'')+hi);
+        return '<div>#'+(idx+1)+' '+parts.join('/')+' '+hits+'x</div>';
+      }).join('');
+    }
+    var severe=imb.filter(function(e){return e[4]>=2;});
+    if(!severe.length){
+      $('cellImbSevereList').textContent='none';
+    } else {
+      $('cellImbSevereList').innerHTML=severe.map(function(e){
+        var idx=e[0],lo=e[1],hi=e[2],hitsSevere=e[4];
+        var parts=[];
+        if(lo!==0)parts.push(lo);
+        if(hi!==0)parts.push((hi>0?'+':'')+hi);
+        return '<div>#'+(idx+1)+' '+parts.join('/')+' '+hitsSevere+'x</div>';
+      }).join('');
+    }
   }
 
   $('hx').textContent=fmt(d.hx,2)+'%';
@@ -506,7 +553,7 @@ function cellHoverAt(clientX){
   var idx=Math.floor((clientX-rect.left)/rect.width*lastCells.mv.length);
   if(idx<0)idx=0; if(idx>=lastCells.mv.length)idx=lastCells.mv.length-1;
   hoverCell=idx;
-  $('cellTip').textContent='cell '+idx+': '+lastCells.mv[idx]+' mV';
+  $('cellTip').textContent='cell '+(idx+1)+': '+lastCells.mv[idx]+' mV';
   drawCells(lastCells);
 }
 // Placeholder skeleton before any data: 96 uniform dim bars so the full
@@ -612,6 +659,11 @@ $('apPwSave').addEventListener('click',function(){
   lastSettingsCmd='apPw';
   ws.send(JSON.stringify({cmd:'setappw',value:pw}));
   $('apPw').value='';
+});
+$('histReset').addEventListener('click',function(){
+  if(!wsUp)return;
+  if(!confirm('Reset cell imbalance history? This cannot be undone.'))return;
+  ws.send(JSON.stringify({cmd:'resethistory'}));
 });
 
 connect();

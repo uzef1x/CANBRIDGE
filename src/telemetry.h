@@ -81,7 +81,11 @@ struct Telemetry {
   int32_t  motor_rpm;                 // MG_OutputRevolution 39|15@0+ (signed despite "+")
   float    motor_torque_nm;           // MG_EffectiveTorque 18|11@0+ (signed despite "+")
   int32_t  mg_error;                  // MG_ErrorCodes 50|6@1+; -1 = never seen
-  int32_t  gear;                      // 0x11A  0=P,2=R,3=N,4=D/B
+  int32_t  gear;                      // 0x11A  0=P(startup),1=P(re-engaged after a shift),2=R,3=N,4=D/B
+                                      // 0 and 1 BOTH mean Park — wire-observed 2026-08-15 (1 in P after
+                                      // shifting out and back; D/B holds 4 steadily while driving, so 1 is
+                                      // Park-specific, not joystick-center). DBC omits value 1; OVMS's 0x421
+                                      // table has the same 0="Parking"/1="Park" pair. Parked check = gear <= 1.
   int32_t  eco_on;                    // 0x11A
   float    speed_kmh;                 // 0x284 (approx)
   float    charge_power_kw;           // 0x1F2

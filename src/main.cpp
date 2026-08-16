@@ -16,6 +16,7 @@
 #include "bridge.h"
 #include "nissan_crc.h"
 #include "leaf_5bc.h"
+#include "leaf_diag.h"
 #include "webui.h"
 #include "vehicle_config.h"
 #include "can_bus.h"
@@ -91,5 +92,6 @@ void loop() {
   webui_broadcast();       // DNS poll + WS telemetry push (reads telemetry; no-op until web up)
   webui_housekeeping();
   canbus_housekeeping();  // persists a detected CAN-A oscillator (NVS write)
+  leaf_diag_history_persist();  // rate-limited cell-imbalance history NVS write
   delay(5);  // yield to the CAN task, AsyncTCP, and IDLE (feeds the IDLE WDT)
 }

@@ -50,6 +50,11 @@ static volatile bool g_web_started = false;        // true once webui_begin() ha
 // task) drains it and performs the actual write.
 static volatile int g_pending_profile = -1;  // -1 = none, else Vehicle value
 
+// Same pending-request handoff, for the "resethistory" WS command: the async
+// task only sets this flag; drain_pending_settings() (Arduino loop task) does
+// the actual leaf_diag_history_reset() call.
+static volatile bool g_pending_history_reset = false;
+
 // Set by the AsyncTCP task on WS_EVT_CONNECT, cleared by webui_broadcast() on
 // the Arduino loop task once it has sent a cells message. Same single-flag
 // handoff pattern as g_pending_profile above — the connect handler must not
@@ -179,6 +184,15 @@ static void handle_cmd_setappw(AsyncWebSocketClient *client, JsonDocument &doc) 
   ws_ack(client, "stored; reboot to apply");
 }
 
+// Handle {"cmd":"resethistory"} — clear the persistent cell-imbalance history.
+// Stashed for the main loop, same pattern as setprofile/setappw: the actual
+// zeroing (and the NVS write it schedules) must not happen on the AsyncTCP task.
+static void handle_cmd_resethistory(AsyncWebSocketClient *client) {
+  if (!car_write_safe()) { ws_err(client, "locked: car must be parked"); return; }
+  g_pending_history_reset = true;  // drained by webui_housekeeping() on the loop task
+  ws_ack(client, "cell imbalance history reset");
+}
+
 // Parse an incoming WS text frame and dispatch to the right cmd handler.
 // Runs in the AsyncTCP task — no handler here may touch canbus_send(), NVS,
 // or ESP.restart() directly; each defers to the main loop via pending state.
@@ -192,6 +206,7 @@ static void handle_ws_command(AsyncWebSocketClient *client, const uint8_t *data,
   else if (!strcmp(cmd, "reboot"))     handle_cmd_reboot(client);
   else if (!strcmp(cmd, "setprofile")) handle_cmd_setprofile(client, doc);
   else if (!strcmp(cmd, "setappw"))    handle_cmd_setappw(client, doc);
+  else if (!strcmp(cmd, "resethistory")) handle_cmd_resethistory(client);
   else ws_err(client, "unknown cmd");
 }
 
@@ -400,9 +415,23 @@ static void build_cells_message(char *buf, size_t buflen) {
   const int paused = ((int32_t)(now - ld.paused_until_ms) < 0) ? 1 : 0;
   n += snprintf(buf + n, (n < (int)buflen) ? buflen - n : 0,
     "],\"hx\":%.2f,\"insulation\":%lu,\"part\":\"%s\",\"serial\":\"%s\",\"bmsid\":\"%s\","
-    "\"poll_age_s\":%lu,\"paused\":%d,\"paused_ext\":%d}",
+    "\"poll_age_s\":%lu,\"paused\":%d,\"paused_ext\":%d,\"imb\":[",
     (double)ld.hx_pct, (unsigned long)ld.insulation_raw, ld.part_number, ld.serial, ld.bms_id,
     (unsigned long)age_s, paused, (paused && ld.ext_pause) ? 1 : 0);
+
+  // Latched cells only (hits >= 2 — see leaf_diag.h). Compact
+  // [cellIndexZeroBased, worstLowMv, worstHighMv, hits, hitsSevere] per entry.
+  // No separate severe array: every severe offender is already a normal
+  // offender (150 mV nests inside 50 mV), so hits>=2 still gates inclusion.
+  bool imb_first = true;
+  for (int i = 0; i < 96 && n < (int)buflen; i++) {
+    const CellImbalanceEntry &e = g_cell_imbalance[i];
+    if (e.hits < 2) continue;
+    n += snprintf(buf + n, buflen - n, "%s[%d,%d,%d,%u,%u]", imb_first ? "" : ",",
+                  i, (int)e.worst_low, (int)e.worst_high, (unsigned)e.hits, (unsigned)e.hits_severe);
+    imb_first = false;
+  }
+  n += snprintf(buf + n, (n < (int)buflen) ? buflen - n : 0, "]}");
 }
 
 // Drain pending settings requests stashed by the AsyncTCP task. Main loop
@@ -415,6 +444,10 @@ static void drain_pending_settings() {
   if (g_pending_appw_ready) {
     ap_password_store(g_pending_appw);
     g_pending_appw_ready = false;
+  }
+  if (g_pending_history_reset) {
+    leaf_diag_history_reset();
+    g_pending_history_reset = false;
   }
 }
 
@@ -441,7 +474,10 @@ void webui_broadcast() {
     if (gen_changed || replay) {
       last_sent_cells_gen  = g_leaf_diag.cells_generation;
       last_sent_shunts_gen = g_leaf_diag.shunts_generation;
-      static char cells_buf[1536];
+      // Worst case: base fields (~700B) + "imb" with all 96 cells latched at
+      // extreme int16 deviations, "[95,-32768,32767,65535,65535]," (~30B) x 96 =
+      // ~2.9KB. ~3.6KB total, 4096 still leaves a comfortable margin.
+      static char cells_buf[4096];
       build_cells_message(cells_buf, sizeof(cells_buf));
       ws.textAll(cells_buf);
     }
