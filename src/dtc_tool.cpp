@@ -23,16 +23,18 @@
 // tool only lists what it can actually reach and clear.
 // The battery is identified by req id 0x79B (its bus is g_telemetry.battery_bus);
 // every other ECU here sits on the vehicle bus (the other of the two).
-// clear_verified: the clear sequence was wire-captured and confirmed to work on
-// this car (battery only so far). false = reads fine here, but the clear is the
-// standard Nissan UDS sequence applied unproven — it self-reports cleared/failed.
+// clear_verified: this ECU returns the positive clear-accepted response (0x54)
+// to the 10 C0 + 14 FF FF FF sequence. ALL SIX confirmed on this car 2026-09-28
+// via an acceptance test (each returned 54). The battery is additionally proven
+// to actually remove stored codes (its 4 real DTCs went away); the other five
+// were acknowledged with no codes present to remove.
 static const struct { const char *name; uint16_t req; uint16_t resp; bool clear_verified; } ECUS[] = {
-  {"HV Battery",  0x79B, 0x7BB, true },
-  {"Inverter/MC", 0x784, 0x78C, false},
-  {"Charger/PDM", 0x792, 0x793, false},
-  {"HVAC",        0x744, 0x764, false},
-  {"Shift",       0x79D, 0x7BD, false},
-  {"TCU",         0x746, 0x783, false},
+  {"HV Battery",  0x79B, 0x7BB, true},
+  {"Inverter/MC", 0x784, 0x78C, true},
+  {"Charger/PDM", 0x792, 0x793, true},
+  {"HVAC",        0x744, 0x764, true},
+  {"Shift",       0x79D, 0x7BD, true},
+  {"TCU",         0x746, 0x783, true},
 };
 #define DTC_ECU_COUNT (sizeof(ECUS) / sizeof(ECUS[0]))
 
