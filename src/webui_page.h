@@ -167,9 +167,9 @@ input[readonly]{opacity:.8}
     <div class="tile"><div class="lbl">Max cell</div><div class="val" id="cellMax">--</div><div class="sub" id="cellMaxN"></div></div>
     <div class="tile"><div class="lbl">Avg cell</div><div class="val" id="cellAvg">--</div></div>
     <div class="tile"><div class="lbl">Spread (imbalance)</div><div class="val big" id="cellSpread">--</div></div>
+    <div class="tile"><div class="lbl">Within 50 mV</div><div class="val" id="cellImbOk">--</div></div>
   </div>
   <div class="chartrow">
-    <div class="tile"><div class="lbl">Within 50 mV</div><div class="val" id="cellImbOk">--</div></div>
     <div class="chartbox">
       <div class="lbl">Exceeded 50 mV <button id="histReset" style="float:right">Reset history</button></div>
       <div class="log" id="cellImbList">none</div>
