@@ -15,9 +15,77 @@
 #include "can_bus.h"
 #include "dtc_tool.h"
 #include <Arduino.h>
+#include <Preferences.h>
 #include <string.h>
 
 LeafDiag g_leaf_diag = {};
+CellImbalanceEntry g_cell_imbalance[96] = {};
+
+// ── Cell-imbalance history persistence ("bridge"/"cellhist") ────────────────
+// Blob layout v2 (current): uint8 version (=2), then 96 x {int16 worst_low,
+// int16 worst_high, uint16 hits, uint16 hits_severe} — serialized
+// field-by-field (not a raw struct memcpy) so the on-flash layout never
+// depends on compiler struct padding.
+// Blob layout v1 (legacy, pre severe-tier): uint8 version (=1), then 96 x
+// {int16 worst_low, int16 worst_high, uint16 hits}. A v1 blob still loads —
+// worst_low/worst_high/hits populate as before, hits_severe stays zeroed.
+#define CELLHIST_VERSION      2
+#define CELLHIST_BLOB_LEN     (1 + 96 * 8)
+#define CELLHIST_V1_BLOB_LEN  (1 + 96 * 6)
+
+static Preferences g_hist_prefs;
+static volatile bool g_hist_dirty        = false;  // CAN task (detection) or loop task (reset) sets, loop task clears
+static uint32_t      g_hist_last_save_ms = 0;
+
+static void history_load() {
+  g_hist_prefs.begin("bridge", false);
+  if (!g_hist_prefs.isKey("cellhist")) return;
+  size_t len = g_hist_prefs.getBytesLength("cellhist");
+
+  if (len == CELLHIST_BLOB_LEN) {
+    uint8_t blob[CELLHIST_BLOB_LEN];
+    g_hist_prefs.getBytes("cellhist", blob, sizeof(blob));
+    if (blob[0] == CELLHIST_VERSION) {
+      size_t off = 1;
+      for (int i = 0; i < 96; i++) {
+        int16_t lo, hi; uint16_t hits, hits_severe;
+        memcpy(&lo,          blob + off, 2); off += 2;
+        memcpy(&hi,          blob + off, 2); off += 2;
+        memcpy(&hits,        blob + off, 2); off += 2;
+        memcpy(&hits_severe, blob + off, 2); off += 2;
+        g_cell_imbalance[i].worst_low   = lo;
+        g_cell_imbalance[i].worst_high  = hi;
+        g_cell_imbalance[i].hits        = hits;
+        g_cell_imbalance[i].hits_severe = hits_severe;
+      }
+    }
+    // Wrong version for this length: leave zeroed.
+    return;
+  }
+
+  if (len == CELLHIST_V1_BLOB_LEN) {
+    uint8_t blob[CELLHIST_V1_BLOB_LEN];
+    g_hist_prefs.getBytes("cellhist", blob, sizeof(blob));
+    if (blob[0] == 1) {
+      size_t off = 1;
+      for (int i = 0; i < 96; i++) {
+        int16_t lo, hi; uint16_t hits;
+        memcpy(&lo,   blob + off, 2); off += 2;
+        memcpy(&hi,   blob + off, 2); off += 2;
+        memcpy(&hits, blob + off, 2); off += 2;
+        g_cell_imbalance[i].worst_low   = lo;
+        g_cell_imbalance[i].worst_high  = hi;
+        g_cell_imbalance[i].hits        = hits;
+        g_cell_imbalance[i].hits_severe = 0;
+      }
+    }
+    // Wrong version for this length: leave zeroed.
+    return;
+  }
+
+  // Blob absent (handled above), or a length matching neither known version:
+  // start zeroed (already the struct's default-initialized state).
+}
 
 void leaf_diag_begin() {
   memset(&g_leaf_diag, 0, sizeof(g_leaf_diag));
@@ -30,6 +98,35 @@ void leaf_diag_begin() {
   // window isn't disturbed by an active-diag request right at power-up.
   g_leaf_diag.paused_until_ms = millis() + 20000;
   g_leaf_diag.ext_pause       = 0;  // this pause is the startup hold-off, not a tool
+  history_load();  // runs before bridge_start_can_task() — same safe window as vehicle_begin()/ap_config_begin()
+}
+
+void leaf_diag_history_persist() {
+  if (!g_hist_dirty) return;
+  const uint32_t now = millis();
+  if (g_hist_last_save_ms != 0 && now - g_hist_last_save_ms < 60000) return;  // at most once per 60s
+  g_hist_dirty        = false;
+  g_hist_last_save_ms = now;
+
+  uint8_t blob[CELLHIST_BLOB_LEN];
+  blob[0] = CELLHIST_VERSION;
+  size_t off = 1;
+  for (int i = 0; i < 96; i++) {
+    int16_t  lo          = g_cell_imbalance[i].worst_low;
+    int16_t  hi          = g_cell_imbalance[i].worst_high;
+    uint16_t hits        = g_cell_imbalance[i].hits;
+    uint16_t hits_severe = g_cell_imbalance[i].hits_severe;
+    memcpy(blob + off, &lo,          2); off += 2;
+    memcpy(blob + off, &hi,          2); off += 2;
+    memcpy(blob + off, &hits,        2); off += 2;
+    memcpy(blob + off, &hits_severe, 2); off += 2;
+  }
+  g_hist_prefs.putBytes("cellhist", blob, sizeof(blob));
+}
+
+void leaf_diag_history_reset() {
+  memset(g_cell_imbalance, 0, sizeof(g_cell_imbalance));
+  g_hist_dirty = true;
 }
 
 // ── Temp_fromRAW_to_F — ported VERBATIM from Battery-Emulator ──────────────────
@@ -193,6 +290,40 @@ static void parse_7bb(const uint8_t *d, uint32_t now) {
         g_leaf_diag.cell_spread_mv = mx - mn;
         g_leaf_diag.cell_min_idx   = mni;
         g_leaf_diag.cell_max_idx   = mxi;
+
+        // Per-cell imbalance detection (see leaf_diag.h for CELL_IMBALANCE_MV/
+        // CELL_IMBALANCE_SEVERE_MV and the latching rule). Direction-gated by
+        // pack activity (g_telemetry.pack_current_a, same ±1.0f deadband as
+        // update_car_state()): discharging only a WEAK cell sags low, so only
+        // negative deviations count; charging only a weak cell rises high, so
+        // only positive deviations count; idle counts both directions as
+        // before. If pack_current_a is stale (t_1db_ms older than 2s, or never
+        // set) the sign can't be trusted, so the whole loop is skipped for
+        // this snapshot — no hits recorded either direction. A severe (150 mV+)
+        // offense also counts as a normal offense, so both counters increment
+        // together in that case, within whichever direction is active.
+        enum { PACK_IDLE, PACK_CHARGING, PACK_DISCHARGING } pack_activity = PACK_IDLE;
+        if (g_telemetry.pack_current_a > 1.0f) pack_activity = PACK_CHARGING;
+        else if (g_telemetry.pack_current_a < -1.0f) pack_activity = PACK_DISCHARGING;
+        const bool current_ok = (g_telemetry.t_1db_ms != 0) && (now - g_telemetry.t_1db_ms < 2000);
+
+        if (current_ok) {
+          for (int i = 0; i < 96; i++) {
+            int32_t dev = (int32_t)g_cell_scratch[i] - (int32_t)g_leaf_diag.cell_avg_mv;
+            if (pack_activity != PACK_DISCHARGING && dev >= CELL_IMBALANCE_MV) {
+              if (g_cell_imbalance[i].hits < 65535) g_cell_imbalance[i].hits++;
+              if (dev >= CELL_IMBALANCE_SEVERE_MV && g_cell_imbalance[i].hits_severe < 65535) g_cell_imbalance[i].hits_severe++;
+              if ((int16_t)dev > g_cell_imbalance[i].worst_high) g_cell_imbalance[i].worst_high = (int16_t)dev;
+              g_hist_dirty = true;
+            } else if (pack_activity != PACK_CHARGING && dev <= -CELL_IMBALANCE_MV) {
+              if (g_cell_imbalance[i].hits < 65535) g_cell_imbalance[i].hits++;
+              if (dev <= -CELL_IMBALANCE_SEVERE_MV && g_cell_imbalance[i].hits_severe < 65535) g_cell_imbalance[i].hits_severe++;
+              if ((int16_t)dev < g_cell_imbalance[i].worst_low) g_cell_imbalance[i].worst_low = (int16_t)dev;
+              g_hist_dirty = true;
+            }
+          }
+        }
+
         g_leaf_diag.cells_generation++;  // bump AFTER the full copy — never expose a half-parsed set
         g_leaf_diag.last_poll_ok_ms = now;
         break;

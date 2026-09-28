@@ -62,6 +62,17 @@ border-radius:8px;padding:6px 8px;margin-top:8px}
 .log div{padding:1px 0}
 .log .err{color:var(--bad)}
 .log .ack{color:var(--good)}
+.netlist{max-height:160px;overflow-y:auto;background:var(--panel2);border-radius:8px;padding:4px;margin-top:6px}
+.netrow{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer;font-size:12px}
+.netrow:hover{background:var(--panel)}
+.netrow.sel{background:var(--panel);outline:1px solid var(--acc)}
+.netrow .ssid{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.netrow .sig{font-size:11px;color:var(--dim);flex-shrink:0}
+.netrow .sig.strong{color:var(--good)}
+.netrow .sig.ok{color:var(--warn)}
+.netrow .sig.weak{color:var(--bad)}
+.netempty{color:var(--dim);font-size:12px;padding:6px}
+.manual-toggle{font-size:11px;color:var(--dim);text-decoration:underline;cursor:pointer;margin-top:6px;display:inline-block}
 canvas.cells{width:100%;height:100px;background:var(--panel2);border-radius:8px;display:block;cursor:crosshair}
 .badge{background:#3a1a1a;border:1px solid var(--bad);border-radius:12px;padding:2px 8px;font-size:11px;
 margin-left:6px;display:inline-block}
@@ -94,6 +105,7 @@ input[readonly]{opacity:.8}
   <span class="pill" title="Firmware version this board is running">FW: <b id="fw">-</b></span>
   <span class="pill" title="Time since the bridge last booted">Up: <span id="uptime">0s</span></span>
   <span class="pill" title="Bridge free RAM">Mem: <span id="heap">-</span></span>
+  <span class="pill" title="Optional join to your home network, alongside the always-on CANBRIDGE AP. Configure in Settings below">Home WiFi: <b id="wifiState">off</b></span>
 </div>
 <div class="statusbar">
   <span class="grp">CAR</span>
@@ -125,7 +137,6 @@ input[readonly]{opacity:.8}
   <div class="tile"><div class="lbl">EVSE limit</div><div class="val" id="evseLim">--</div></div>
   <div class="tile" id="chgStatusTile" style="display:none"><div class="lbl">Charger status</div><div class="val" id="chgStatus">--</div></div>
 </div>
-
 <h2>Drive</h2>
 <div class="grid">
   <div class="tile"><div class="lbl">Speed (approx)</div><div class="val" id="speed">--</div></div>
@@ -156,6 +167,17 @@ input[readonly]{opacity:.8}
     <div class="tile"><div class="lbl">Max cell</div><div class="val" id="cellMax">--</div><div class="sub" id="cellMaxN"></div></div>
     <div class="tile"><div class="lbl">Avg cell</div><div class="val" id="cellAvg">--</div></div>
     <div class="tile"><div class="lbl">Spread (imbalance)</div><div class="val big" id="cellSpread">--</div></div>
+  </div>
+  <div class="chartrow">
+    <div class="tile"><div class="lbl">Within 50 mV</div><div class="val" id="cellImbOk">--</div></div>
+    <div class="chartbox">
+      <div class="lbl">Exceeded 50 mV <button id="histReset" style="float:right">Reset history</button></div>
+      <div class="log" id="cellImbList">none</div>
+    </div>
+    <div class="chartbox">
+      <div class="lbl">Exceeded 150 mV</div>
+      <div class="log" id="cellImbSevereList">none</div>
+    </div>
   </div>
   <div class="grid">
     <div class="tile"><div class="lbl">Hx</div><div class="val" id="hx">--</div></div>
@@ -209,6 +231,25 @@ input[readonly]{opacity:.8}
       </div>
       <div class="hint">8&ndash;63 characters, applied after reboot. Current password is never shown here.</div>
       <div class="statusline" id="apPwStatus"></div>
+    </div>
+
+    <div class="field">
+      <label>Home WiFi</label>
+      <div class="row" style="margin-bottom:0">
+        <button id="wifiScanBtn">Scan</button>
+        <span class="hint" id="wifiSelLabel" style="margin-top:0">No network selected</span>
+      </div>
+      <div class="netlist" id="wifiNets"><div class="netempty">Press Scan to see nearby networks.</div></div>
+      <span class="manual-toggle" id="wifiManualToggle">enter name manually (hidden network)</span>
+      <div class="row" id="wifiManualRow" style="display:none;margin-bottom:0;margin-top:6px">
+        <input type="text" id="wifiSsid" placeholder="network name (SSID)" maxlength="32" autocomplete="off">
+      </div>
+      <div class="row" style="margin-bottom:0;margin-top:6px">
+        <input type="password" id="wifiPw" placeholder="password (blank if open)" autocomplete="new-password">
+        <button id="wifiSave">Save</button>
+      </div>
+      <div class="hint">Empty SSID disables home WiFi. The CANBRIDGE AP always stays available as fallback.</div>
+      <div class="statusline" id="wifiStatus"></div>
     </div>
 
     <div class="field">
@@ -276,9 +317,19 @@ function connect(){
     try{d=JSON.parse(ev.data);}catch(e){return;}
     if(d.type==='ack'||d.type==='err'){logTx(d);statusReply(d);return;}
     if(d.type==='cells'){renderCells(d);return;}
+    if(d.type==='wifiscan'){renderWifiNets(d);return;}
     if(d.type==='dtc'){renderDtc(d);return;}
     render(d);
   };
+}
+
+// Text -> HTML-escaped, used for SSIDs before they go into innerHTML — SSIDs
+// come straight off the air (attacker-controlled), so this is not optional
+// the way it would be for a value we generated ourselves.
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
 }
 
 function logTx(d){
@@ -325,6 +376,7 @@ function render(d){
   }
   $('state').textContent=stateTxt;
   $('battBusNote').textContent = d.battery_bus<0?'':('— wired to bridge port '+(d.battery_bus===0?'A':'B'));
+  syncWifi(d);
   $('fw').textContent=d.fw||'-';
   $('uptime').textContent=Math.floor(d.uptime_ms/1000)+'s';
   $('heap').textContent=(d.free_heap/1024).toFixed(1)+'KB';
@@ -370,8 +422,9 @@ function render(d){
   $('chgV').textContent = ac===1 ? fmt(d.ac_voltage_v,1)+' V' : (qc===1 ? fmt(d.qc_voltage_v,1)+' V' : '--');
   $('chgCurrent').textContent = (ac===1||qc===1) ? fmt(Math.abs(d.pack_current_a),1)+' A' : '--';
 
+
   $('speed').textContent=fmt(d.speed_kmh,1)+' km/h';
-  var g=['P','?','R','N','D/B'];
+  var g=['P','P','R','N','D/B'];
   $('gear').textContent=g[d.gear]!==undefined?g[d.gear]:d.gear;
   $('eco').textContent=d.eco_on?'ON':'OFF';
   $('torque').textContent=fmt(d.torque_nm,1)+' Nm';
@@ -402,7 +455,7 @@ function render(d){
 
 function applyLock(){
   $('lockBanner').className='lockbanner'+(writeSafe?'':' show');
-  var ids=['profSel','profReboot','apPw','apPwSave','rebootBtn','armSwitch'];
+  var ids=['profSel','profReboot','apPw','apPwSave','wifiSsid','wifiPw','wifiSave','rebootBtn','armSwitch','histReset'];
   ids.forEach(function(id){
     var el=$(id);
     if(!el)return;
@@ -454,10 +507,46 @@ function renderCells(d){
     var min=Math.min.apply(null,mv), max=Math.max.apply(null,mv);
     var minI=mv.indexOf(min), maxI=mv.indexOf(max);
     var avg=mv.reduce(function(a,b){return a+b;},0)/mv.length;
-    $('cellMin').textContent=min+' mV'; $('cellMinN').textContent='cell '+minI;
-    $('cellMax').textContent=max+' mV'; $('cellMaxN').textContent='cell '+maxI;
+    $('cellMin').textContent=min+' mV'; $('cellMinN').textContent='cell '+(minI+1);
+    $('cellMax').textContent=max+' mV'; $('cellMaxN').textContent='cell '+(maxI+1);
     $('cellAvg').textContent=avg.toFixed(1)+' mV';
     $('cellSpread').textContent=(max-min)+' mV';
+  }
+
+  var imb=(d.imb||[]).slice().sort(function(a,b){
+    var wa=Math.max(Math.abs(a[1]),a[2]), wb=Math.max(Math.abs(b[1]),b[2]);
+    return (wb-wa)||(b[3]-a[3]);
+  });
+  if(!d.gen){
+    $('cellImbOk').textContent='--';
+    $('cellImbList').textContent='none';
+    $('cellImbSevereList').textContent='none';
+  } else {
+    $('cellImbOk').textContent=(96-imb.length);
+    var normal=imb.filter(function(e){return e[4]<2;});  // severe-latched cells live ONLY in the 150 box
+    if(!normal.length){
+      $('cellImbList').textContent='none';
+    } else {
+      $('cellImbList').innerHTML=normal.map(function(e){
+        var idx=e[0],lo=e[1],hi=e[2],hits=e[3];
+        var parts=[];
+        if(lo!==0)parts.push(lo);
+        if(hi!==0)parts.push((hi>0?'+':'')+hi);
+        return '<div>#'+(idx+1)+' '+parts.join('/')+' '+hits+'x</div>';
+      }).join('');
+    }
+    var severe=imb.filter(function(e){return e[4]>=2;});
+    if(!severe.length){
+      $('cellImbSevereList').textContent='none';
+    } else {
+      $('cellImbSevereList').innerHTML=severe.map(function(e){
+        var idx=e[0],lo=e[1],hi=e[2],hitsSevere=e[4];
+        var parts=[];
+        if(lo!==0)parts.push(lo);
+        if(hi!==0)parts.push((hi>0?'+':'')+hi);
+        return '<div>#'+(idx+1)+' '+parts.join('/')+' '+hitsSevere+'x</div>';
+      }).join('');
+    }
   }
 
   $('hx').textContent=fmt(d.hx,2)+'%';
@@ -520,7 +609,7 @@ function cellHoverAt(clientX){
   var idx=Math.floor((clientX-rect.left)/rect.width*lastCells.mv.length);
   if(idx<0)idx=0; if(idx>=lastCells.mv.length)idx=lastCells.mv.length-1;
   hoverCell=idx;
-  $('cellTip').textContent='cell '+idx+': '+lastCells.mv[idx]+' mV';
+  $('cellTip').textContent='cell '+(idx+1)+': '+lastCells.mv[idx]+' mV';
   drawCells(lastCells);
 }
 // Placeholder skeleton before any data: 96 uniform dim bars so the full
@@ -603,6 +692,17 @@ function syncProfile(d){
   $('profActive').textContent=d.vehicle||'-';
   $('profReboot').style.display=(d.profile_stored!==d.vehicle)?'':'none';
 }
+// Home-WiFi status pill: "off" (no SSID configured), "joining..." (SSID set,
+// not yet connected), or the IP once wifi_client has actually joined.
+function syncWifi(d){
+  var el=$('wifiState');
+  el.className='';
+  if(!d.wifi_ssid){ el.textContent='off'; return; }
+  if(d.wifi_up){ el.textContent=d.wifi_ip; return; }
+  if(d.wifi_status==='no_ap'){ el.textContent='network not found'; el.className='bad'; return; }
+  if(d.wifi_status==='auth'){ el.textContent='wrong password?'; el.className='bad'; return; }
+  el.textContent='joining…';
+}
 $('profSel').addEventListener('change',function(){
   if(!wsUp)return;
   profBusy=true;
@@ -626,6 +726,89 @@ $('apPwSave').addEventListener('click',function(){
   lastSettingsCmd='apPw';
   ws.send(JSON.stringify({cmd:'setappw',value:pw}));
   $('apPw').value='';
+});
+$('histReset').addEventListener('click',function(){
+  if(!wsUp)return;
+  if(!confirm('Reset cell imbalance history? This cannot be undone.'))return;
+  ws.send(JSON.stringify({cmd:'resethistory'}));
+});
+
+// Scan-and-pick state for the Home WiFi field. wifiSelectedSsid is the SSID
+// clicked from the last scan's results; wifiManual overrides it once the
+// user opts into the hidden-network text field. Whichever happened most
+// recently is what Save actually sends — see updateWifiSelLabel().
+var wifiSelectedSsid=null, wifiManual=false, wifiScanTimeout=null;
+
+function updateWifiSelLabel(){
+  var ssid = wifiManual ? $('wifiSsid').value : wifiSelectedSsid;
+  $('wifiSelLabel').textContent = ssid ? ('Will save: '+ssid) : 'No network selected';
+}
+
+// Renders a {"type":"wifiscan","nets":[{"ssid","rssi","sec"},...]} message.
+// Server already dedupes/sorts/caps; this just draws rows and wires clicks.
+function renderWifiNets(d){
+  clearTimeout(wifiScanTimeout);
+  wifiScanTimeout=null;
+  $('wifiScanBtn').disabled=false;
+  $('wifiScanBtn').textContent='Scan';
+  var list=$('wifiNets');
+  list.innerHTML='';
+  if(!d.nets || !d.nets.length){
+    list.innerHTML='<div class="netempty">No networks found.</div>';
+    return;
+  }
+  d.nets.forEach(function(net){
+    var row=document.createElement('div');
+    row.className='netrow';
+    var sigClass = net.rssi>-60?'strong':(net.rssi>-75?'ok':'weak');
+    row.innerHTML='<span class="ssid">'+(net.sec?'&#128274; ':'')+escapeHtml(net.ssid)+
+                  '</span><span class="sig '+sigClass+'">'+net.rssi+' dBm</span>';
+    row.addEventListener('click',function(){
+      var sib=list.children;
+      for(var i=0;i<sib.length;i++) sib[i].classList.remove('sel');
+      row.classList.add('sel');
+      wifiSelectedSsid=net.ssid;
+      wifiManual=false;
+      $('wifiManualRow').style.display='none';
+      $('wifiSsid').value='';
+      updateWifiSelLabel();
+    });
+    list.appendChild(row);
+  });
+}
+
+$('wifiScanBtn').addEventListener('click',function(){
+  if(!wsUp)return;
+  $('wifiScanBtn').disabled=true;
+  $('wifiScanBtn').textContent='scanning…';
+  ws.send(JSON.stringify({cmd:'wifiscan'}));
+  // Belt-and-braces re-enable in case the result never arrives (e.g. the
+  // scan itself failed core-side and the reply got lost) — the button must
+  // never get stuck disabled.
+  wifiScanTimeout=setTimeout(function(){
+    $('wifiScanBtn').disabled=false;
+    $('wifiScanBtn').textContent='Scan';
+  },15000);
+});
+
+$('wifiManualToggle').addEventListener('click',function(){
+  wifiManual=true;
+  wifiSelectedSsid=null;
+  var sib=$('wifiNets').children;
+  for(var i=0;i<sib.length;i++) sib[i].classList.remove('sel');
+  $('wifiManualRow').style.display='';
+  $('wifiSsid').focus();
+  updateWifiSelLabel();
+});
+$('wifiSsid').addEventListener('input',function(){ if(wifiManual) updateWifiSelLabel(); });
+
+$('wifiSave').addEventListener('click',function(){
+  if(!wsUp)return;
+  var ssid = wifiManual ? $('wifiSsid').value : (wifiSelectedSsid||'');
+  var pw=$('wifiPw').value;
+  lastSettingsCmd='wifi';
+  ws.send(JSON.stringify({cmd:'setwifi',ssid:ssid,password:pw}));
+  $('wifiPw').value='';
 });
 
 // DTC decode: b0 hi 2 bits = letter (P/C/B/U), next 2 bits + b1 = the 4-digit

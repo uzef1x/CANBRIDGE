@@ -140,7 +140,14 @@ static void update_car_state(uint32_t now) {
   // dead speed signal reads as charging, not driving — regen implies motion,
   // motion implies 0x284 speed frames, and can_tx_safe()'s gear==P clause
   // still gates independently.
-  if (fabsf(g_telemetry.speed_kmh) > 1.0f || g_telemetry.pack_current_a < -3.0f) {
+  // The current fallback is additionally gated on gear != P (live-found
+  // 2026-08-15): a parked-but-READY car runs its HV accessories (A/C, heater,
+  // DC-DC) off the pack, and that drain alone exceeded 3 A — which read as
+  // DRIVING while stationary in P with the handbrake on, wrongly locking every
+  // settings control. Driving in P is impossible, so gear != P keeps the
+  // dead-speed backstop for real driving without the accessory false trigger.
+  if (fabsf(g_telemetry.speed_kmh) > 1.0f ||
+      (g_telemetry.pack_current_a < -3.0f && g_telemetry.gear > 1 /* not P, see gear in telemetry.h */)) {
     g_telemetry.car_state = STATE_DRIVING;
     pending = STATE_DRIVING; pending_since = now;
     return;
@@ -191,8 +198,11 @@ void telemetry_capture(BridgeBus from, const BridgeFrame &f) {
       g_telemetry.pack_current_a = (float)i_raw * 0.5f;
       uint32_t soc_raw = get_le(f.data, 32, 7);
       g_telemetry.usable_soc_pct = (soc_raw > 100) ? -1 : (int32_t)soc_raw;
-      g_telemetry.lb_failsafe_status    = (int32_t)get_be(f.data, 8, 3);
-      g_telemetry.lb_relay_cut_request  = (int32_t)get_be(f.data, 11, 2);
+      // Both @1+ (little-endian) in the DBC — were wrongly read big-endian
+      // until 2026-08-15, which blended in the two MSBs of LB_Total_Voltage
+      // and made the FS tile show a constant 2 (3 above 384 V). User-caught.
+      g_telemetry.lb_failsafe_status    = (int32_t)get_le(f.data, 8, 3);
+      g_telemetry.lb_relay_cut_request  = (int32_t)get_le(f.data, 11, 2);
       g_telemetry.lb_main_relay_on      = (int32_t)get_le(f.data, 29, 1);
       g_telemetry.pack_power_kw = g_telemetry.pack_voltage_v * g_telemetry.pack_current_a / 1000.0f;
       g_telemetry.t_1db_ms = now;
@@ -397,7 +407,7 @@ bool car_write_safe() {
 
   return (g_telemetry.car_state != STATE_DRIVING) &&
          (g_telemetry.speed_kmh < 2.0f) &&
-         (g_telemetry.gear == 0 /* P */);
+         (g_telemetry.gear <= 1 /* P: 0=startup, 1=re-engaged — see gear in telemetry.h */);
 }
 
 bool can_tx_safe() {
@@ -414,5 +424,5 @@ bool can_tx_safe() {
 
   return (g_telemetry.car_state != STATE_DRIVING) &&
          (g_telemetry.speed_kmh < 2.0f) &&
-         (g_telemetry.gear == 0 /* P */);
+         (g_telemetry.gear <= 1 /* P: 0=startup, 1=re-engaged — see gear in telemetry.h */);
 }

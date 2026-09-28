@@ -41,6 +41,9 @@
 #define DIAG_TIMEOUT_MS         500u    // in-flight group abandoned after this much silence
 #define DIAG_EXTERNAL_PAUSE_MS  100000u // pause when a real OBD diagnostic tool is detected (~dala's ~100s margin)
 
+#define CELL_IMBALANCE_MV        50     // |cell mV - snapshot avg| threshold that counts as an offense
+#define CELL_IMBALANCE_SEVERE_MV 150    // second, more severe tier — same offense, also counted separately
+
 // ── Published diagnostic snapshot (CAN-pump task writes, web reads) ───────────
 struct LeafDiag {
   // Group 0x02 — 96 cell voltages, mV. cells_generation bumps only after a full,
@@ -81,8 +84,44 @@ struct LeafDiag {
 
 extern LeafDiag g_leaf_diag;
 
+// ── Persistent per-cell imbalance history ───────────────────────────────────
+// A cell "latches" once its hit counter reaches 2 (1 hit is pending, not shown
+// yet). worst_low/worst_high track the most negative/most positive deviation
+// ever seen independently — only the direction that offended on a given
+// snapshot updates. Offenses are now direction-gated by pack activity
+// (g_telemetry.pack_current_a): only discharging can populate worst_low/hits
+// from a low offense, only charging can populate worst_high/hits from a high
+// offense, and idle allows both — so e.g. worst_high will simply never
+// populate at all during a discharge-only session, not just "not this round".
+// Written by leaf_diag_capture()'s group-0x02 finalize (CAN-
+// pump task) and by leaf_diag_history_reset() (Arduino loop task, via the WS
+// "resethistory" command); read by build_cells_message() (loop task). No lock
+// between writer and reader — same accepted cross-task risk as cells_mv[] etc.
+// (see banner above): display-only, never feeds car_write_safe()/can_tx_safe().
+struct CellImbalanceEntry {
+  int16_t  worst_low;    // most negative deviation ever seen, mV (0 = never breached low)
+  int16_t  worst_high;   // most positive deviation ever seen, mV (0 = never breached high)
+  uint16_t hits;         // offense count at CELL_IMBALANCE_MV, saturates at 65535; latched once >= 2
+  uint16_t hits_severe;  // offense count at CELL_IMBALANCE_SEVERE_MV, saturates at 65535, independent
+                          // of hits; latched once >= 2 (same noise guard). Every severe offense is
+                          // also a normal offense, so hits_severe never exceeds hits.
+};
+extern CellImbalanceEntry g_cell_imbalance[96];
+
 // One-time init. Call once from bridge_begin(), after telemetry_begin().
 void leaf_diag_begin();
+
+// Write the "cellhist" NVS blob if detection or a reset has dirtied
+// g_cell_imbalance, rate-limited to at most once per 60s. Call from loop()
+// (Arduino loop task) ONLY — this is the one place Preferences.putBytes() for
+// "cellhist" may run (never the CAN-pump task, never the AsyncTCP task).
+void leaf_diag_history_persist();
+
+// Zero g_cell_imbalance and mark it dirty so leaf_diag_history_persist() writes
+// the cleared blob on its next tick. Call from the Arduino loop task only (the
+// WS "resethistory" command stashes a request; webui.cpp's settings drain calls
+// this).
+void leaf_diag_history_reset();
 
 // Called from pump() for every RX frame, on the CAN-pump task, right after
 // telemetry_capture(). Handles 0x7BB parsing + flow control (battery bus only)

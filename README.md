@@ -120,6 +120,23 @@ Features:
   battery's part number/serial/BMS ID. Auto-pauses for ~100 s whenever a real
   OBD diagnostic tool is seen polling the bus, to avoid two ISO-TP conversations
   colliding on the same request ID.
+- **Cell imbalance history**: every cell-voltage poll, each of the 96 cells is
+  checked against that poll's own average; a cell that lands 50 mV or more away
+  from the average (high or low) counts as an offense. Deviations only count
+  against the direction that indicates weakness for what the pack is
+  currently doing: low deviations while discharging, high deviations while
+  charging, both directions at rest. A cell only shows up in
+  the "Exceeded 50 mV" list once it has offended on 2 separate polls (one hit is
+  treated as noise, not shown) — from then on it stays listed, along with its
+  worst-ever low/high deviation and a hit count, until explicitly cleared. This
+  history survives reboots (stored in flash) so a slow-developing imbalance is
+  visible even if nobody was watching the dashboard when it started. A second,
+  more severe tier tracks the same offenses at 150 mV or more, with its own
+  "Exceeded 150 mV" list and hit count (a severe offense is by definition also
+  a 50 mV offense, so it appears in both lists once latched). The "Reset
+  history" button in the cells panel clears both tiers at once (with a
+  confirmation prompt); like other settings changes it's locked unless the
+  car is parked.
 - Frame monitor: live per-ID rate/count/payload tables for both CAN buses.
 - **Custom CAN transmit** panel (battery / vehicle / raw bus A / raw bus B), behind an
   "Arm transmit" toggle. Transmitting also requires the bridge to positively confirm
