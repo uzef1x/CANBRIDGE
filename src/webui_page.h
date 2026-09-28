@@ -169,7 +169,7 @@ input[readonly]{opacity:.8}
     <div class="tile"><div class="lbl">Spread</div><div class="val" id="cellSpread">--</div></div>
     <div class="tile"><div class="lbl">Within 50 mV</div><div class="val" id="cellImbOk">--</div></div>
   </div>
-  <div class="chartrow">
+  <div class="chartrow" style="margin-top:8px">
     <div class="chartbox">
       <div class="lbl">Exceeded 50 mV</div>
       <div class="log" id="cellImbList">none</div>
