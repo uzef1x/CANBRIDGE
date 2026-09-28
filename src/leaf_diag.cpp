@@ -174,6 +174,10 @@ static int32_t raw_to_c(uint16_t raw) {
 static uint8_t  g_group_7bb = 0;
 static uint8_t  g_group_7bb_length = 0;
 
+// ISO-TP transport integrity for the current multi-frame reply (see parse_7bb).
+static uint8_t  g_seq_next     = 0;      // expected next consecutive-frame sequence nibble
+static bool     g_resp_corrupt = false;  // set if any frame arrives out of ISO-TP sequence
+
 // group 0x02 — cell voltages
 static uint16_t g_cell_scratch[96];
 static uint16_t g_cell_idx = 0;
@@ -233,6 +237,20 @@ static uint8_t pick_next_group() {
 static void parse_7bb(const uint8_t *d, uint32_t now) {
   if (d[0] == 0x10) { g_group_7bb = d[3]; g_group_7bb_length = d[1]; }  // first frame of a new group carries the group echo + reply length
 
+  // ISO-TP transport integrity: a clean multi-frame reply is 0x10, then
+  // consecutive frames 0x21,0x22,...,0x2F,0x20,... in strict order (nibble wraps
+  // mod 16). A dropped, duplicated, or interleaved frame (e.g. another tool
+  // transmitting 0x7BB mid-poll) breaks that nibble sequence — we flag it and
+  // discard the group-0x02 cell snapshot at finalize, so corrupt/incomplete cell
+  // data can never poison the published voltages or the imbalance history. This
+  // is a pure TRANSPORT check: it makes no judgment about the cell VALUES, so a
+  // genuinely faulted cell at any voltage still gets through.
+  if (d[0] == 0x10) { g_seq_next = 1; g_resp_corrupt = false; }
+  else if ((d[0] & 0xF0) == 0x20) {
+    if ((d[0] & 0x0F) != g_seq_next) g_resp_corrupt = true;
+    g_seq_next = (uint8_t)((g_seq_next + 1) & 0x0F);
+  }
+
   switch (g_group_7bb) {
 
     case 0x01: {  // insulation (frame 0x23) + Hx (frame 0x24) — L570-601
@@ -275,6 +293,11 @@ static void parse_7bb(const uint8_t *d, uint32_t now) {
         break;
       }
       if (d[0] == 0x2C && d[6] == 0xFF) {  // last frame — no cell data, finalize
+        // Discard a corrupt or incomplete reply (see the integrity note in
+        // parse_7bb): don't publish it, don't bump the generation, don't feed
+        // imbalance detection — just wait for the next clean poll. An intact
+        // sequence through this terminator also proves all 96 cells arrived.
+        if (g_resp_corrupt || g_cell_idx != 96) break;
         uint32_t sum = 0, mn = 0xFFFFFFFFu, mx = 0;
         int32_t mni = -1, mxi = -1;
         for (int i = 0; i < 96; i++) {
