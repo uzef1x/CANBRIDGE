@@ -166,7 +166,7 @@ input[readonly]{opacity:.8}
     <div class="tile"><div class="lbl">Min cell</div><div class="val" id="cellMin">--</div><div class="sub" id="cellMinN"></div></div>
     <div class="tile"><div class="lbl">Max cell</div><div class="val" id="cellMax">--</div><div class="sub" id="cellMaxN"></div></div>
     <div class="tile"><div class="lbl">Avg cell</div><div class="val" id="cellAvg">--</div></div>
-    <div class="tile"><div class="lbl">Spread (imbalance)</div><div class="val big" id="cellSpread">--</div></div>
+    <div class="tile"><div class="lbl">Spread</div><div class="val" id="cellSpread">--</div></div>
     <div class="tile"><div class="lbl">Within 50 mV</div><div class="val" id="cellImbOk">--</div></div>
   </div>
   <div class="chartrow">
