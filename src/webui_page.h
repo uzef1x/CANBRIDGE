@@ -171,7 +171,7 @@ input[readonly]{opacity:.8}
   </div>
   <div class="chartrow">
     <div class="chartbox">
-      <div class="lbl">Exceeded 50 mV <button id="histReset" style="float:right">Reset history</button></div>
+      <div class="lbl">Exceeded 50 mV</div>
       <div class="log" id="cellImbList">none</div>
     </div>
     <div class="chartbox">
@@ -179,6 +179,7 @@ input[readonly]{opacity:.8}
       <div class="log" id="cellImbSevereList">none</div>
     </div>
   </div>
+  <div style="margin:8px 0"><button id="histReset">Reset history</button></div>
   <div class="grid">
     <div class="tile"><div class="lbl">Hx</div><div class="val" id="hx">--</div></div>
     <div class="tile"><div class="lbl">Insulation</div><div class="val" id="insul">--</div></div>
