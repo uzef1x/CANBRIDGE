@@ -5,6 +5,7 @@
 #include "env200_translation.h"
 #include "telemetry.h"
 #include "leaf_diag.h"
+#include "dtc_tool.h"
 #include "webui.h"
 #include "ap_config.h"
 #include <Arduino.h>
@@ -36,6 +37,7 @@ static void pump(BridgeBus from, BridgeBus to, uint32_t &counter) {
   while (canbus_receive(from, f)) {
     telemetry_capture(from, f);  // read-only tap, before translate()
     leaf_diag_capture(from, f);  // OBD-style diag tap; may TX flow control directly
+    dtc_tool_capture(from, f);   // on-demand DTC scan/clear tap; may TX flow control directly
     if (translate(from, f)) {
       canbus_send(to, f);
       counter++;
@@ -100,6 +102,7 @@ static void can_task(void *) {
 
     webui_drain_tx();    // web-originated CAN TX (re-checks can_tx_safe inside)
     leaf_diag_task();    // OBD-style diag poll state machine
+    dtc_tool_task();     // on-demand DTC scan/clear state machine
 
     const uint32_t now = millis();
     if (now - g_last_report_ms >= 2000) {

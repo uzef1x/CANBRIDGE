@@ -242,6 +242,19 @@ input[readonly]{opacity:.8}
   </div>
 </details>
 
+<details class="settings">
+  <summary>&#128295; Diagnostics &mdash; DTC scan</summary>
+  <div class="settings-body">
+    <div class="sub">Reads and clears diagnostic trouble codes from every ECU. Transmits to the car &mdash; allowed only while parked. Disconnect any other diagnostic tool (LeafSpy) first.</div>
+    <div class="row" style="margin-top:8px">
+      <button id="dtcScan">Scan all ECUs</button>
+      <button id="dtcClearAll">Clear all faults</button>
+    </div>
+    <div class="statusline" id="dtcStatus"></div>
+    <div id="dtcList"></div>
+  </div>
+</details>
+
 <footer>CANBRIDGE &middot; AP 10.0.0.1 &middot; refreshes every 250ms</footer>
 
 <script>
@@ -263,6 +276,7 @@ function connect(){
     try{d=JSON.parse(ev.data);}catch(e){return;}
     if(d.type==='ack'||d.type==='err'){logTx(d);statusReply(d);return;}
     if(d.type==='cells'){renderCells(d);return;}
+    if(d.type==='dtc'){renderDtc(d);return;}
     render(d);
   };
 }
@@ -612,6 +626,72 @@ $('apPwSave').addEventListener('click',function(){
   lastSettingsCmd='apPw';
   ws.send(JSON.stringify({cmd:'setappw',value:pw}));
   $('apPw').value='';
+});
+
+// DTC decode: b0 hi 2 bits = letter (P/C/B/U), next 2 bits + b1 = the 4-digit
+// code, e.g. 0x31,0x8D -> 'P318D'.
+function decodeDtc(c){
+  var letter=['P','C','B','U'][c[0]>>6];
+  var s=letter+((c[0]>>4)&3).toString()+(c[0]&0xF).toString(16).toUpperCase()
+    +(c[1]<16?'0':'')+c[1].toString(16).toUpperCase();
+  return s;
+}
+
+var dtcStatusLabel={0:'unknown',1:'scanning…',2:'OK',3:'faults',4:'no response',5:'clearing…'};
+var dtcStatusClass={2:'pos',3:'neg',4:'sub'};  // green/amber/gray; 5 (clearing) unstyled
+function renderDtc(d){
+  $('dtcScan').disabled=!!d.scanning;
+  $('dtcClearAll').disabled=!!d.scanning;
+  if(d.err){
+    $('dtcStatus').textContent=d.err;
+    $('dtcStatus').className='statusline err';
+  } else if(!d.scanning && lastSettingsCmd!=='dtc'){
+    $('dtcStatus').textContent='';
+    $('dtcStatus').className='statusline';
+  }
+
+  var list=$('dtcList');
+  list.innerHTML='';
+  (d.ecus||[]).forEach(function(e,i){
+    var row=document.createElement('div');
+    row.className='field';
+    var cls=dtcStatusClass[e.status]||'';
+    var label=dtcStatusLabel[e.status]||e.status;
+    if(e.status===3) label=e.dtcs.length+' fault'+(e.dtcs.length===1?'':'s');
+    var html='<b>'+e.name+'</b> <span class="sub">'+e.req+'</span> '
+      +'<span class="'+cls+'">'+label+'</span>'
+      +' <span class="sub">clear '+(e.verified?'verified':'unproven')+'</span>';
+    if(e.clear) html+=' <span class="sub">'+e.clear+'</span>';
+    if(e.status===3){
+      html+=' <button data-ecu="'+i+'" class="dtcClearOne">Clear</button>';
+    }
+    if(e.dtcs && e.dtcs.length){
+      html+='<div class="sub">'+e.dtcs.map(function(c){
+        return decodeDtc(c)+' (raw '+c[0].toString(16)+' '+c[1].toString(16)+' '+c[2].toString(16)+', st='+c[3].toString(16)+')';
+      }).join('<br>')+'</div>';
+    }
+    row.innerHTML=html;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('.dtcClearOne').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      if(!wsUp)return;
+      lastSettingsCmd='dtc';
+      ws.send(JSON.stringify({cmd:'dtcclear',ecu:parseInt(btn.getAttribute('data-ecu'),10)}));
+    });
+  });
+}
+$('dtcScan').addEventListener('click',function(){
+  if(!wsUp)return;
+  lastSettingsCmd='dtc';
+  $('dtcStatus').textContent='scanning...';
+  $('dtcStatus').className='statusline';
+  ws.send(JSON.stringify({cmd:'dtcscan'}));
+});
+$('dtcClearAll').addEventListener('click',function(){
+  if(!wsUp)return;
+  lastSettingsCmd='dtc';
+  ws.send(JSON.stringify({cmd:'dtcclearall'}));
 });
 
 connect();

@@ -11,6 +11,7 @@
 #include "webui.h"
 #include "telemetry.h"
 #include "leaf_diag.h"
+#include "dtc_tool.h"
 #include "can_bus.h"
 #include "vehicle_config.h"
 #include "leaf_translation.h"
@@ -179,6 +180,30 @@ static void handle_cmd_setappw(AsyncWebSocketClient *client, JsonDocument &doc) 
   ws_ack(client, "stored; reboot to apply");
 }
 
+// Handle {"cmd":"dtcscan"} — full DTC scan of every ECU. Gated by
+// can_tx_safe(): like handle_cmd_tx, this transmits to the car. dtc_request_scan()
+// only sets a volatile flag (see dtc_tool.h) — no CAN/NVS touched here.
+static void handle_cmd_dtcscan(AsyncWebSocketClient *client) {
+  if (!can_tx_safe()) { ws_err(client, "locked: car must be parked"); return; }
+  dtc_request_scan();
+  ws_ack(client, "scanning");
+}
+
+// Handle {"cmd":"dtcclear","ecu":<index>} — clear one ECU, then re-read it.
+static void handle_cmd_dtcclear(AsyncWebSocketClient *client, JsonDocument &doc) {
+  if (!can_tx_safe()) { ws_err(client, "locked: car must be parked"); return; }
+  int ecu = doc["ecu"] | -1;
+  dtc_request_clear(ecu);
+  ws_ack(client, "clearing");
+}
+
+// Handle {"cmd":"dtcclearall"} — clear every ECU currently in FAULTS state.
+static void handle_cmd_dtcclearall(AsyncWebSocketClient *client) {
+  if (!can_tx_safe()) { ws_err(client, "locked: car must be parked"); return; }
+  dtc_request_clear_all();
+  ws_ack(client, "clearing all");
+}
+
 // Parse an incoming WS text frame and dispatch to the right cmd handler.
 // Runs in the AsyncTCP task — no handler here may touch canbus_send(), NVS,
 // or ESP.restart() directly; each defers to the main loop via pending state.
@@ -191,7 +216,10 @@ static void handle_ws_command(AsyncWebSocketClient *client, const uint8_t *data,
   if      (!strcmp(cmd, "tx"))         handle_cmd_tx(client, doc);
   else if (!strcmp(cmd, "reboot"))     handle_cmd_reboot(client);
   else if (!strcmp(cmd, "setprofile")) handle_cmd_setprofile(client, doc);
-  else if (!strcmp(cmd, "setappw"))    handle_cmd_setappw(client, doc);
+  else if (!strcmp(cmd, "setappw"))     handle_cmd_setappw(client, doc);
+  else if (!strcmp(cmd, "dtcscan"))     handle_cmd_dtcscan(client);
+  else if (!strcmp(cmd, "dtcclear"))    handle_cmd_dtcclear(client, doc);
+  else if (!strcmp(cmd, "dtcclearall")) handle_cmd_dtcclearall(client);
   else ws_err(client, "unknown cmd");
 }
 
@@ -405,6 +433,27 @@ static void build_cells_message(char *buf, size_t buflen) {
     (unsigned long)age_s, paused, (paused && ld.ext_pause) ? 1 : 0);
 }
 
+// ── DTC scan/clear broadcast ─────────────────────────────────────────────────
+// Same "own buffer, generation-watched" pattern as build_cells_message() above
+// — independent of the 250 ms snapshot cadence, sent only when a scan/clear
+// step actually changed something.
+static void build_dtc_message(char *buf, size_t buflen) {
+  int n = snprintf(buf, buflen, "{\"type\":\"dtc\",\"scanning\":%d,\"err\":\"%s\",\"ecus\":[",
+                    g_dtc_scanning, dtc_error());
+  for (int i = 0; i < dtc_ecu_count() && n < (int)buflen; i++) {
+    const DtcEcuResult &r = g_dtc_results[i];
+    n += snprintf(buf + n, buflen - n,
+      "%s{\"name\":\"%s\",\"req\":\"0x%03X\",\"verified\":%d,\"status\":%d,\"clear\":\"%s\",\"dtcs\":[",
+      i ? "," : "", dtc_ecu_name(i), dtc_ecu_req(i), dtc_ecu_clear_verified(i) ? 1 : 0, r.status, r.clear_msg);
+    for (int j = 0; j < r.n && n < (int)buflen; j++) {
+      n += snprintf(buf + n, buflen - n, "%s[%d,%d,%d,%d]", j ? "," : "",
+                    r.codes[j].b0, r.codes[j].b1, r.codes[j].b2, r.codes[j].status);
+    }
+    n += snprintf(buf + n, (n < (int)buflen) ? buflen - n : 0, "]}");
+  }
+  n += snprintf(buf + n, (n < (int)buflen) ? buflen - n : 0, "]}");
+}
+
 // Drain pending settings requests stashed by the AsyncTCP task. Main loop
 // task ONLY — this is where NVS writes actually happen (Part B #3).
 static void drain_pending_settings() {
@@ -444,6 +493,14 @@ void webui_broadcast() {
       static char cells_buf[1536];
       build_cells_message(cells_buf, sizeof(cells_buf));
       ws.textAll(cells_buf);
+    }
+
+    static uint32_t last_sent_dtc_gen = 0;
+    if (g_dtc_generation != last_sent_dtc_gen) {
+      last_sent_dtc_gen = g_dtc_generation;
+      static char dtc_buf[6144];
+      build_dtc_message(dtc_buf, sizeof(dtc_buf));
+      ws.textAll(dtc_buf);
     }
   }
 

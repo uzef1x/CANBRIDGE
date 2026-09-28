@@ -13,6 +13,7 @@
 #include "leaf_diag.h"
 #include "telemetry.h"
 #include "can_bus.h"
+#include "dtc_tool.h"
 #include <Arduino.h>
 #include <string.h>
 
@@ -347,6 +348,9 @@ static uint32_t g_last_activity_ms = 0;  // last TX/RX in the current group tran
 
 void leaf_diag_capture(BridgeBus from, const BridgeFrame &f) {
   const uint32_t now = millis();
+  // The DTC tool owns the 0x79B/0x7BB ISO-TP channel while it runs; our
+  // poller must stay silent to avoid colliding on the request id.
+  if (dtc_tool_active()) return;
 
   if (f.id == 0x79B) {
     // Any RECEIVED 0x79B is by definition from an external tool — our own
@@ -383,6 +387,9 @@ static uint32_t g_next_poll_ms = 0;
 
 void leaf_diag_task() {
   const uint32_t now = millis();
+  // The DTC tool owns the 0x79B/0x7BB ISO-TP channel while it runs; our
+  // poller must stay silent to avoid colliding on the request id.
+  if (dtc_tool_active()) return;
 
   if (g_waiting && (now - g_last_activity_ms > DIAG_TIMEOUT_MS)) {
     g_waiting = false;  // in-flight group abandoned — next tick moves on
