@@ -74,6 +74,7 @@ enum JobMode   { JOB_NONE=0, JOB_SCAN, JOB_CLEAR };
 enum ClearStep { CLEAR_SESSION=0, CLEAR_CLEARDTC, CLEAR_REREAD };
 
 #define DTC_STEP_TIMEOUT_MS 250u
+#define DTC_JOB_MAX_MS      20000u  // hard cap on a whole scan/clear job (a full scan is <5s)
 
 static int      g_mode       = JOB_NONE;
 static int      g_cur_ecu    = -1;
@@ -81,6 +82,7 @@ static int      g_clear_step = CLEAR_SESSION;
 static bool     g_clear_all  = false;  // this CLEAR job is chaining through every FAULTS ecu
 static bool     g_awaiting   = false;  // a request is in flight, waiting on a response
 static uint32_t g_deadline   = 0;
+static uint32_t g_job_start_ms = 0;    // millis() when the current job began (hard-cap reference)
 
 // ISO-TP reassembly for the response currently being waited on.
 static uint8_t  g_asm_buf[64];
@@ -262,6 +264,7 @@ void dtc_tool_task() {
       g_cur_ecu   = 0;
       g_clear_all = false;
       g_dtc_scanning = 1;
+      g_job_start_ms = now;
       g_dtc_results[0].status = DTC_ECU_SCANNING;
       send_to(0, REQ_READ_DTC);
       arm_wait();
@@ -290,6 +293,7 @@ void dtc_tool_task() {
       g_cur_ecu    = start_ecu;
       g_clear_step = CLEAR_SESSION;
       g_dtc_scanning = 1;
+      g_job_start_ms = now;
       g_dtc_results[start_ecu].status = DTC_ECU_CLEARING;
       g_dtc_results[start_ecu].clear_msg[0] = '\0';
       send_to(start_ecu, REQ_SESSION_C0);
@@ -311,6 +315,17 @@ void dtc_tool_task() {
     g_cur_ecu  = -1;
     g_dtc_scanning = 0;
     g_dtc_generation++;
+    return;
+  }
+
+  // Hard overall-job cap: a scan/clear should finish in a few seconds. If a job
+  // is somehow still active well past that (a stuck step, a lost response chain,
+  // the "shouldn't happen" no-await state below), force-finish it — so the UI can
+  // never spin forever and the periodic DTC push can't keep firing for hours.
+  // Belt-and-suspenders beyond the per-step 250 ms deadline.
+  if ((uint32_t)(now - g_job_start_ms) > DTC_JOB_MAX_MS) {
+    set_msg(g_dtc_error, sizeof(g_dtc_error), "job timed out — aborted");
+    finish_job();
     return;
   }
 
