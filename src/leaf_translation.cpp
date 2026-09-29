@@ -3,10 +3,10 @@
 // Ported faithfully from dalathegreat/Nissan-LEAF-Battery-Upgrade
 //   Software/CANBRIDGE-3port/leaf-can-bridge-3-port/can-bridge-firmware.c
 // Line references (Lnnn) below point into that file. Every constant / byte value
-// is taken from dala's source — nothing invented.
+// is taken from Dala's source — nothing invented.
 //
 // Architecture mapping (AVR 3-port → ESP32 2-bus):
-//   dala: can_handler() modifies frame, injects generated frames to
+//   Dala: can_handler() modifies frame, injects generated frames to
 //         battery_can_bus, then forwards frame to the OTHER bus unless blocked.
 //   here: leaf_translate() modifies `f`, injects via canbus_send(battery_bus,…),
 //         and returns false to block (the bridge forwards to the other bus).
@@ -26,7 +26,7 @@
 #define MY_BATTERY_40 2
 #define MY_BATTERY_62 3
 
-// ── Charge states / charge-time mux — dala can-bridge-firmware.h L41-50 ───────
+// ── Charge states / charge-time mux — Dala can-bridge-firmware.h L41-50 ───────
 #define CHARGING_SLOW           0x20
 #define CHARGING_QUICK          0xC0
 #define CHARGING_IDLE           0x60
@@ -53,7 +53,7 @@
 // ── Battery temp LUT (offset -40C), index data[3]/20 — L46 ───────────────────
 static const uint8_t temp_lut[13] = {25,28,31,34,37,50,63,76,80,82,85,87,90};
 
-// ── State (dala globals, L8-92) ──────────────────────────────────────────────
+// ── State (Dala globals, L8-92) ──────────────────────────────────────────────
 static uint8_t  My_Leaf    = MY_LEAF_AZE0;   // L13 boot AZE0
 static uint8_t  My_Battery = MY_BATTERY_24;  // L8 boot 24kWh
 // UI-only: true once the value above was set from observed traffic rather than
@@ -126,7 +126,7 @@ void leaf_reset_state() {   // L206-210
   startup_counter_39X = 0;
 }
 
-// 1 s tick (dala TCC0 ISR L222-241): on ZE0, reset state if 0x1F2 goes missing.
+// 1 s tick (Dala TCC0 ISR L222-241): on ZE0, reset state if 0x1F2 goes missing.
 void leaf_tick() {
   static uint32_t last = 0;
   const uint32_t now = millis();

@@ -21,7 +21,7 @@ struct Leaf5C0 {
   uint8_t LB_DTC;            // 8-bit  diagnostic trouble code
 };
 
-// Pack into CAN bytes, leaving d[6] untouched (matches dala convert_5c0_to_array).
+// Pack into CAN bytes, leaving d[6] untouched (matches Dala convert_5c0_to_array).
 static inline void leaf5c0_pack(const Leaf5C0 &s, uint8_t d[8]) {
   d[0] = (uint8_t)((s.LB_HIS_DATA_SW << 6) | s.LB_HIS_HLVOL_TIMS);
   d[1] = (uint8_t)(s.LB_HIS_TEMP_WUP << 1);

@@ -387,7 +387,7 @@ function render(d){
   $('socRaw').textContent='0.1% raw: '+fmt(d.soc_tenth_pct/10,1)+'%';
   $('gids').textContent=d.gids>=0?d.gids:'--';
   // GIDs is what the battery reports; Wh-per-GID is a community estimate, not a
-  // Nissan-published constant (77 in dala's Battery-Emulator, 77.5 in the
+  // Nissan-published constant (77 in Dala's Battery-Emulator, 77.5 in the
   // common diagnostic tooling, "roughly 80" in the DBC notes). Use 77.5 and
   // show the result as approximate — one decimal, leading "~" — so the page
   // never implies precision the number cannot carry.

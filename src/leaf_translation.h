@@ -25,7 +25,7 @@ bool leaf_translate(BridgeBus from, BridgeFrame &f);
 // detection state read by leaf_detected_vehicle()/leaf_detected_battery().
 void leaf_observe(BridgeBus from, const BridgeFrame &f);
 
-// 1 s housekeeping tick (dala TCC0 ISR): ZE0 resets state if 0x1F2 goes missing.
+// 1 s housekeeping tick (Dala TCC0 ISR): ZE0 resets state if 0x1F2 goes missing.
 void leaf_tick(void);
 void leaf_reset_state(void);
 

@@ -39,7 +39,7 @@
 
 #define DIAG_POLL_INTERVAL_MS   3000u   // one group request per tick
 #define DIAG_TIMEOUT_MS         500u    // in-flight group abandoned after this much silence
-#define DIAG_EXTERNAL_PAUSE_MS  100000u // pause when a real OBD diagnostic tool is detected (~dala's ~100s margin)
+#define DIAG_EXTERNAL_PAUSE_MS  100000u // pause when a real OBD diagnostic tool is detected (~Dala's ~100s margin)
 
 #define CELL_IMBALANCE_MV        50     // |cell mV - snapshot avg| threshold that counts as an offense
 #define CELL_IMBALANCE_SEVERE_MV 150    // second, more severe tier — same offense, also counted separately

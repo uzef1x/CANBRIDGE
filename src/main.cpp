@@ -29,7 +29,7 @@
 // hung CAN task (e.g. a stuck SPI transaction) would silently drop the battery
 // off the EV-CAN mid-drive, so it must reboot; the Arduino loop task and the
 // web/WiFi core are intentionally NOT watched, so a web-side hang leaves a
-// healthy bridge forwarding instead of rebooting it. 2 s is generous (dala's
+// healthy bridge forwarding instead of rebooting it. 2 s is generous (Dala's
 // AVR uses 15 ms) — tighten at bench bring-up once real timing is measured.
 
 // One-time bench sanity check of the ported primitives (0x5BC pack/unpack + CRC-8).

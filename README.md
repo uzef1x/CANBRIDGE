@@ -29,14 +29,14 @@ the older car accepts it.
 
 **This is a port of [dalathegreat](https://github.com/dalathegreat)'s GPL-3.0
 battery-upgrade CAN bridges.** See [Credits & attribution](#credits--attribution).
-All of the CAN translation logic comes from dala's work, with per-line source
+All of the CAN translation logic comes from Dala's work, with per-line source
 references in the code comments; none of the underlying reverse-engineering
 originates here.
 
 ## Hardware — LilyGo T-2CANFD (ESP32-S3)
 
 The board has **two galvanically-isolated CAN ports**. The bridge is installed **inline
-in the Nissan EV-CAN bus, between the vehicle and the battery** (dala: *"mounted between
+in the Nissan EV-CAN bus, between the vehicle and the battery** (Dala: *"mounted between
 the battery and vehicle EV-CAN system"*). You cut the EV-CAN bus and connect one segment
 to each port. Both segments are classic **CAN 2.0B @ 500 kbit/s**.
 
@@ -210,13 +210,13 @@ Design: all battery-upgrade logic lives behind `translate()`; the driver and
 forwarding code never change as features are added. Generated frames are injected onto
 the auto-detected battery bus; the block list drops frames via `return false`.
 
-## Architecture faithfulness (vs dala 3-port)
+## Architecture faithfulness (vs Dala 3-port)
 
-- dala forwards a received frame to the *other* bus unless blocked → same here.
-- dala injects generated frames to `battery_can_bus` → here via `canbus_send(battery_bus,…)`.
-- dala's 3rd port is `#define DISABLE_CAN3` by default → a 2-bus bridge matches the
+- Dala forwards a received frame to the *other* bus unless blocked → same here.
+- Dala injects generated frames to `battery_can_bus` → here via `canbus_send(battery_bus,…)`.
+- Dala's 3rd port is `#define DISABLE_CAN3` by default → a 2-bus bridge matches the
   default configuration.
-- dala's software TX FIFO works around an MCP25625 erratum; the MCP2518FD/TWAI drivers
+- Dala's software TX FIFO works around an MCP25625 erratum; the MCP2518FD/TWAI drivers
   have their own TX queues and no such erratum.
 
 ## License & credits
@@ -224,7 +224,7 @@ the auto-detected battery bus; the block list drops frames via `return false`.
 This project is a derivative work of dalathegreat's **GPL-3.0** battery-upgrade bridges,
 so it is released under the **GNU General Public License v3.0** — see [LICENSE](LICENSE).
 If you use, modify, or distribute it, you must preserve the attribution below and keep it
-GPL-3.0. This is required by dala's license and is the right thing to do — the credit for
+GPL-3.0. This is required by Dala's license and is the right thing to do — the credit for
 this work belongs with them.
 
 ### Credits & attribution
@@ -244,13 +244,13 @@ Source material (© their respective authors):
   dashboard's OBD-style battery diagnostic polling (`src/leaf_diag.*` — 0x79B/0x7BB group
   requests, cell-voltage/shunt/temperature/identity parsing, the `Temp_fromRAW_to_F()`
   conversion) is ported from its `Software/src/battery/NISSAN-LEAF-BATTERY.cpp`.
-- dala's bridges were developed together with **Muxsan**'s 3-port CAN-bridge hardware.
+- Dala's bridges were developed together with **Muxsan**'s 3-port CAN-bridge hardware.
 
 Also referenced / thanks to:
-- **NismoBoy34 / Esp32LeafInverterBridge** — the prior ESP32 attempt that prompted this project. Its battery-upgrade translation was never implemented, so the logic here is re-ported directly from dala rather than taken from it.
+- **NismoBoy34 / Esp32LeafInverterBridge** — the prior ESP32 attempt that prompted this project. Its battery-upgrade translation was never implemented, so the logic here is re-ported directly from Dala rather than taken from it.
 - **LilyGo T-2CANFD** board pinout — from [Xinyuan-LilyGO/T-2Can](https://github.com/Xinyuan-LilyGO/T-2Can).
 - **ACAN2517FD** MCP2518FD driver library by Pierre Molinaro.
 - **Longan_CANFD** — https://github.com/Longan-Labs/Longan_CANFD — MCP2518FD library used during development to cross-check controller configuration (via LilyGo's example code).
 
 The code comments carry per-handler source line references (e.g. `// L523-736`) so every
-value can be traced back to dala's original file and line.
+value can be traced back to Dala's original file and line.

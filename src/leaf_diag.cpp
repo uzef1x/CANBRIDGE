@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // See leaf_diag.h for the concurrency contract and source attribution.
 //
-// Every group-parsing branch below is ported line-for-line from dala's
+// Every group-parsing branch below is ported line-for-line from Dala's
 // Battery-Emulator NISSAN-LEAF-BATTERY.cpp `handle_incoming_can_frame()` case
 // 0x7BB (L372-612), with two intentional deviations, both called out inline:
 //   1. The group-0x04 four-sensor min search: upstream assigns raw_2 where
@@ -130,7 +130,7 @@ void leaf_diag_history_reset() {
 }
 
 // ── Temp_fromRAW_to_F — ported VERBATIM from Battery-Emulator ──────────────────
-// "This function feels horrible, but apparently works well" — dala,
+// "This function feels horrible, but apparently works well" — Dala,
 // NISSAN-LEAF-BATTERY.cpp L868. Kept exactly as-is, thresholds and all.
 static int32_t Temp_fromRAW_to_F(int32_t temperature) {
   if (temperature == 1021) {
@@ -165,7 +165,7 @@ static int32_t Temp_fromRAW_to_F(int32_t temperature) {
   return (int32_t)(1094 + (309 - temperature) * 2.5714285714285715);
 }
 
-// Raw sensor reading -> degC, tenths-of-degF-from-freezing convention as dala's.
+// Raw sensor reading -> degC, tenths-of-degF-from-freezing convention as Dala's.
 static int32_t raw_to_c(uint16_t raw) {
   return ((Temp_fromRAW_to_F(raw) - 320) * 5) / 9;
 }
