@@ -39,6 +39,13 @@ static void start_join() {
   g_last_reason = 0;            // fresh attempt: forget the previous verdict
   if (g_pass[0] != '\0') WiFi.begin(g_ssid, g_pass);
   else                   WiFi.begin(g_ssid);  // open network
+  // CRITICAL: enabling the station re-enables ESP32 modem power-save by default,
+  // which dozes the radio between DTIM beacons -> high latency + heavy packet
+  // loss to the bridge (measured ~1.2s RTT / 80% loss on a phone hotspot, which
+  // buffers for sleeping clients far worse than a router). webui_begin()'s
+  // setSleep(false) was applied while AP-only and does NOT survive the switch to
+  // AP_STA, so re-assert it here, after begin(), for a responsive station link.
+  WiFi.setSleep(false);
 }
 
 void wifi_client_begin() {
