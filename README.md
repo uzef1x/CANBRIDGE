@@ -102,10 +102,13 @@ needed:
   shows that line right after flashing, e.g. `[webui] AP 'CANBRIDGE' password: …`.
   You can set your own password later from the dashboard's settings.
 - **Open** `http://10.0.0.1:8080` in a phone or laptop browser. If the page reports itself unreachable while the bridge is clearly running, the browser is silently upgrading the address to HTTPS, which the bridge cannot serve — Chrome does this even for explicitly typed `http://` addresses when its **"Always use secure connections"** setting is on (Chrome ⋮ → Settings → Privacy and security). Turn that setting off, or use a browser without forced HTTPS. Plain `http://10.0.0.1` also works. The AP answers the OS connectivity checks, so phones treat it as a normal network and route to the bridge over WiFi.
+- **Home WiFi (optional)**: from the dashboard's Settings the bridge can also
+  join your home network, so the dashboard is reachable at the bridge's home IP
+  in addition to the always-on `CANBRIDGE` access point.
 
 Features:
 - Status bar: active profile (LEAF / e-NV200 / Monitor), car state
-  (Idle/Driving/Charging/Discharging/Asleep), which bus is the battery, WebSocket connection
+  (Idle/Driving/Charging/Discharging), which bus is the battery, WebSocket connection
   state, uptime — plus a "Detected" field showing the wire-confirmed car
   generation and battery size (battery only in Monitor mode).
 - Battery tiles: SOC, GIDs/kWh, SOH, pack voltage/current/power, temperature,
@@ -139,6 +142,13 @@ Features:
   confirmation prompt); like other settings changes it's locked unless the
   car is parked.
 - Frame monitor: live per-ID rate/count/payload tables for both CAN buses.
+- **Diagnostics — DTC scan & clear**: scans every reachable ECU on the bridge's
+  CAN segment (battery, inverter, charger, HVAC, shift, TCU), lists any stored
+  diagnostic trouble codes decoded (e.g. `P318E`) under each ECU, and clears
+  them — all from the browser. Uses standard UDS (`0x19` read, `0x10 C0` + `0x14`
+  clear); like custom transmit, it only sends while the car is confirmed parked.
+  ECUs the VCM answers for on the OBD/Car-CAN side (e.g. the VCM itself) are not
+  reachable from the bridge's position and are not listed.
 - **Custom CAN transmit** panel (battery / vehicle / raw bus A / raw bus B), behind an
   "Arm transmit" toggle. Transmitting also requires the bridge to positively confirm
   from live CAN traffic that the car is parked, so the panel stays locked on a bench
@@ -154,6 +164,8 @@ bridge's existing forwarding path and never modifies them. All dashboard-origina
 transmits are queued and sent from the dedicated CAN-pump task via `webui_drain_tx()`,
 the only code that touches the CAN drivers. They are never sent from the WiFi/web task,
 since the CAN drivers are not thread-safe.
+
+![The CANBRIDGE web dashboard — battery, charging, drive and inverter telemetry, battery cells with imbalance history, frame monitor, settings, custom CAN transmit, and the DTC diagnostics scan](CANBRIDGE-09-29-2026_07_08_PM.png)
 
 ## Selecting the profile
 
