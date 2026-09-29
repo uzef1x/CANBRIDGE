@@ -78,6 +78,14 @@ bool wifi_client_store(const char *ssid, const char *password) {
   size_t plen = password ? strlen(password) : 0;
   if (slen > 32) return false;
   if (plen != 0 && (plen < 8 || plen > 63)) return false;
+  // Reject control chars / '"' / '\' in the SSID here too (not only in the WS
+  // handler): build_snapshot() emits wifi_ssid raw and unescaped, so a stored
+  // SSID with one of these would produce malformed snapshot JSON. Enforce it at
+  // the store boundary so no caller can bypass it.
+  for (size_t i = 0; i < slen; i++) {
+    unsigned char c = (unsigned char)ssid[i];
+    if (c < 0x20 || c == '"' || c == '\\') return false;
+  }
 
   prefs.putString("wssid", ssid ? ssid : "");
   prefs.putString("wpass", password ? password : "");

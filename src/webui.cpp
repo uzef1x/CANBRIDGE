@@ -211,6 +211,10 @@ static void handle_cmd_dtcscan(AsyncWebSocketClient *client) {
 static void handle_cmd_dtcclear(AsyncWebSocketClient *client, JsonDocument &doc) {
   if (!can_tx_safe()) { ws_err(client, "locked: car must be parked"); return; }
   int ecu = doc["ecu"] | -1;
+  // Reject a missing/out-of-range index rather than pass -1 through — inside
+  // dtc_tool -1 is the "no pending clear" sentinel, so it would silently drop
+  // the request after we'd already acked "clearing".
+  if (ecu < 0 || ecu >= dtc_ecu_count()) { ws_err(client, "bad ecu index"); return; }
   dtc_request_clear(ecu);
   ws_ack(client, "clearing");
 }

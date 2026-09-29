@@ -62,7 +62,8 @@ const char *dtc_error();  // "" when no error; set on refusal/abort, cleared at 
 void dtc_request_scan();          // full scan of all ECUs
 void dtc_request_clear(int ecu);  // clear one ECU (then it re-reads that ECU)
 void dtc_request_clear_all();     // clear every ECU currently in FAULTS state
-bool dtc_tool_active();           // true while scanning/clearing (read by leaf_diag gates)
+bool dtc_tool_active();           // true while a job is ACTIVELY running (g_dtc_scanning)
+bool dtc_tool_busy();             // true while a job is pending OR active — leaf_diag stands down on this
 
 // CAN-pump task:
 void dtc_tool_capture(BridgeBus from, const BridgeFrame &f);  // feed every RX frame to the active job

@@ -539,15 +539,24 @@ void leaf_diag_capture(BridgeBus from, const BridgeFrame &f) {
 static bool     g_waiting = false;
 static uint32_t g_next_poll_ms = 0;
 
+bool leaf_diag_busy() { return g_waiting; }  // an ISO-TP poll is in flight on 0x79B/0x7BB
+
 void leaf_diag_task() {
   const uint32_t now = millis();
-  // The DTC tool owns the 0x79B/0x7BB ISO-TP channel while it runs; our
-  // poller must stay silent to avoid colliding on the request id.
-  if (dtc_tool_active()) return;
 
+  // Time out an in-flight poll FIRST — even while standing down below — else
+  // g_waiting could stick and dtc_tool_task() would defer its job forever.
   if (g_waiting && (now - g_last_activity_ms > DIAG_TIMEOUT_MS)) {
     g_waiting = false;  // in-flight group abandoned — next tick moves on
   }
+
+  // Stand down from issuing NEW polls the moment a DTC scan/clear is even
+  // PENDING (not only active): this task runs before dtc_tool_task(), so on the
+  // tick a job starts we could otherwise fire one last 0x79B poll that collides
+  // with the DTC request on the shared battery ISO-TP channel and garbles both.
+  // (dtc_tool_task() also waits for leaf_diag_busy()==false before starting, so
+  // any poll already in flight completes cleanly before the DTC job begins.)
+  if (dtc_tool_busy()) return;
 
   const bool paused = (int32_t)(now - g_leaf_diag.paused_until_ms) < 0;
   const bool battery_ok = (g_telemetry.battery_bus >= 0) &&

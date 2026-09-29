@@ -132,8 +132,9 @@ Features:
   history survives reboots (stored in flash) so a slow-developing imbalance is
   visible even if nobody was watching the dashboard when it started. A second,
   more severe tier tracks the same offenses at 150 mV or more, with its own
-  "Exceeded 150 mV" list and hit count (a severe offense is by definition also
-  a 50 mV offense, so it appears in both lists once latched). The "Reset
+  "Exceeded 150 mV" list and hit count. A cell that has latched as severe is
+  shown only in the "Exceeded 150 mV" list, not also in the 50 mV list (no
+  duplicates — the more severe tier wins). The "Reset
   history" button in the cells panel clears both tiers at once (with a
   confirmation prompt); like other settings changes it's locked unless the
   car is parked.

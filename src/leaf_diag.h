@@ -131,3 +131,7 @@ void leaf_diag_capture(BridgeBus from, const BridgeFrame &f);
 // Poll state machine. Call from the CAN-pump task (can_task()), after
 // webui_drain_tx(). May call canbus_send() directly.
 void leaf_diag_task();
+
+// True while an ISO-TP poll is in flight on 0x79B/0x7BB. dtc_tool waits for this
+// to clear before starting a job so the two never collide on that channel.
+bool leaf_diag_busy();

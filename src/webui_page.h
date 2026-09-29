@@ -523,7 +523,12 @@ function renderCells(d){
     $('cellImbList').textContent='none';
     $('cellImbSevereList').textContent='none';
   } else {
-    $('cellImbOk').textContent=(96-imb.length);
+    // "Within 50 mV" reflects the CURRENT reading — count cells within 50 mV of
+    // the present average — not 96 minus the ever-latched list (which would keep
+    // excluding a cell that offended once historically but is fine now).
+    var cavg=mv.reduce(function(a,b){return a+b;},0)/mv.length, cwithin=0;
+    for(var ci=0;ci<mv.length;ci++){ if(Math.abs(mv[ci]-cavg)<=50) cwithin++; }
+    $('cellImbOk').textContent=cwithin;
     var normal=imb.filter(function(e){return e[4]<2;});  // severe-latched cells live ONLY in the 150 box
     if(!normal.length){
       $('cellImbList').textContent='none';

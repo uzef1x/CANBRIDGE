@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 #include "dtc_tool.h"
 #include "telemetry.h"
+#include "leaf_diag.h"
 #include "can_bus.h"
 #include <Arduino.h>
 #include <string.h>
@@ -64,6 +65,7 @@ static volatile bool g_pending_scan      = false;
 static volatile int  g_pending_clear_ecu = -1;  // -1 none, -2 clear-all, >=0 ecu index
 
 bool dtc_tool_active() { return g_dtc_scanning != 0; }
+// dtc_tool_busy() is defined after the job-state (g_mode) declarations below.
 void dtc_request_scan()          { g_pending_scan = true; }
 void dtc_request_clear(int ecu)  { g_pending_clear_ecu = ecu; }
 void dtc_request_clear_all()     { g_pending_clear_ecu = -2; }
@@ -83,6 +85,9 @@ static bool     g_clear_all  = false;  // this CLEAR job is chaining through eve
 static bool     g_awaiting   = false;  // a request is in flight, waiting on a response
 static uint32_t g_deadline   = 0;
 static uint32_t g_job_start_ms = 0;    // millis() when the current job began (hard-cap reference)
+
+// Pending OR active — leaf_diag stands down from new polls on this (see leaf_diag_task).
+bool dtc_tool_busy() { return g_pending_scan || g_pending_clear_ecu != -1 || g_mode != JOB_NONE; }
 
 // ISO-TP reassembly for the response currently being waited on.
 static uint8_t  g_asm_buf[64];
@@ -244,6 +249,11 @@ void dtc_tool_task() {
 
   // ── Pick up a new job when idle ──────────────────────────────────────────
   if (g_mode == JOB_NONE) {
+    // Don't start until the cell poller's in-flight ISO-TP transaction (if any)
+    // has finished — otherwise its 0x7BB response would be consumed by our
+    // assembler as garbage. leaf_diag stops issuing NEW polls once we're pending
+    // (dtc_tool_busy()), so this waits at most one poll's worth (<=500 ms).
+    if ((g_pending_scan || g_pending_clear_ecu != -1) && leaf_diag_busy()) return;
     if (g_pending_scan) {
       g_pending_scan = false;
       g_dtc_error[0] = '\0';
