@@ -39,33 +39,6 @@ select {
     font-size: 0.9rem;
     color: #555;
 }
-
-ul {
-    margin: 0 0 1.2rem;
-    padding-left: 1.3rem;
-}
-
-li {
-    margin-bottom: 0.4rem;
-}
-
-figure {
-    margin: 1.5rem 0;
-}
-
-figure img {
-    display: block;
-    max-width: 100%;
-    height: auto;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-}
-
-figcaption {
-    font-size: 0.9rem;
-    color: #555;
-    margin-top: 0.4rem;
-}
 </style>
 <!-- esp-web-tools 10.4.0, vendored into this repo (docs/vendor/esp-web-tools/)
      so the installer does not depend on an external CDN being reachable or
@@ -82,49 +55,6 @@ figcaption {
 <p>Nissan LEAF / e-NV200 battery-upgrade CAN bridge for the
 <b>LilyGo T-2CANFD (ESP32-S3)</b>. This page flashes the firmware over USB
 from a Chrome or Edge browser.</p>
-
-<h2>What it does</h2>
-
-<p>Wired between the battery and the car, CANBRIDGE serves a live dashboard over
-WiFi — its own always-on <code>CANBRIDGE</code> access point, plus your home
-network if you set one. Everything runs on the board: no app, no cloud.</p>
-
-<ul>
-  <li><b>Live battery &amp; vehicle telemetry</b> — SOC, GIDs, SOH, pack
-  voltage / current / power, temperatures, relay &amp; failsafe state, charging
-  (charger type, voltage, power, EVSE limit), drive (speed, gear, torque) and
-  inverter (RPM, torque, temperatures).</li>
-  <li><b>Diagnostic trouble codes — read &amp; clear</b> — scan every reachable
-  ECU, see faults decoded (e.g. <code>P318E</code>) under each one, and clear
-  them from the browser. Transmits only while the car is parked.</li>
-  <li><b>Battery cell monitoring</b> — all 96 cell voltages, min / max / average
-  / spread, per-cell balancing, pack temperatures, and a persistent imbalance
-  history that flags cells drifting over time.</li>
-  <li><b>More</b> — home-WiFi station mode alongside the always-on AP, a raw CAN
-  frame monitor, a parked-gated custom CAN transmit, and switchable
-  <b>Monitor / LEAF / e-NV200</b> profiles.</li>
-</ul>
-
-<figure>
-  <img src="screenshots/dashboard-overview.jpg"
-       alt="CANBRIDGE dashboard showing battery, charging, drive and inverter telemetry">
-  <figcaption>The dashboard — live battery, charging, drive and inverter
-  telemetry.</figcaption>
-</figure>
-
-<figure>
-  <img src="screenshots/dtc-scan.jpg"
-       alt="Diagnostics DTC scan with per-ECU results and decoded fault codes">
-  <figcaption>Diagnostics — scan and clear trouble codes on every reachable ECU
-  (example data: the battery showing two swap-related codes).</figcaption>
-</figure>
-
-<figure>
-  <img src="screenshots/battery-cells.jpg"
-       alt="Battery cell voltages, imbalance summary and pack temperatures">
-  <figcaption>Battery cells — 96 cell voltages, imbalance summary and pack
-  temperatures.</figcaption>
-</figure>
 
 <h2>Step 1: Attach the board</h2>
 
