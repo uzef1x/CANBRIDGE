@@ -16,7 +16,6 @@
 #include "vehicle_config.h"
 #include "leaf_translation.h"
 #include "ap_config.h"
-#include "wifi_client.h"
 #include "fw_version.h"
 #include <Arduino.h>
 #include <WiFi.h>
@@ -70,18 +69,6 @@ static volatile bool g_cells_replay_pending = false;
 // clears the flag. One flag, one buffer, one writer, one reader — no tearing.
 static char g_pending_appw[64];
 static volatile bool g_pending_appw_ready = false;
-
-// Same single-flag handoff pattern as g_pending_appw above, for the home-WiFi
-// SSID/password pair. Unlike the AP password, drain_pending_settings() applies
-// this immediately (wifi_client_store() restarts the join) — no reboot needed.
-static char g_pending_wifi_ssid[33];
-static char g_pending_wifi_pass[64];
-static volatile bool g_pending_wifi_ready = false;
-
-// Same single-flag handoff pattern as g_pending_profile above, for a
-// requested nearby-network scan. No buffer needed (the request carries no
-// data) — just start/not-started.
-static volatile bool g_pending_wifi_scan = false;
 
 // ── Small helpers ────────────────────────────────────────────────────────────
 static void ws_reply(AsyncWebSocketClient *client, const char *msg) {
@@ -235,47 +222,6 @@ static void handle_cmd_resethistory(AsyncWebSocketClient *client) {
   ws_ack(client, "cell imbalance history reset");
 }
 
-// Handle {"cmd":"setwifi","ssid":"...","password":"..."} — stash for the main
-// loop. Empty ssid disables station mode and forgets the stored credentials.
-// NEVER echoes the password back.
-static void handle_cmd_setwifi(AsyncWebSocketClient *client, JsonDocument &doc) {
-  const char *ssid = doc["ssid"] | "";
-  const char *pw   = doc["password"] | "";
-  size_t slen = strlen(ssid);
-  size_t plen = strlen(pw);
-  if (slen > 32) { ws_err(client, "ssid must be 0-32 chars"); return; }
-  if (plen != 0 && (plen < 8 || plen > 63)) { ws_err(client, "password must be empty or 8-63 chars"); return; }
-  // Reject characters that would break the JSON snapshot's ssid field — the
-  // snapshot emits ssid raw, unescaped, like detected/profile strings do.
-  for (size_t i = 0; i < slen; i++) {
-    unsigned char c = (unsigned char)ssid[i];
-    if (c < 0x20 || c == '"' || c == '\\') { ws_err(client, "ssid contains an unsupported character"); return; }
-  }
-  if (!car_write_safe()) { ws_err(client, "locked: car must be parked"); return; }
-  // Reject a second setwifi while the main loop hasn't consumed the first —
-  // same torn-buffer rationale as handle_cmd_setappw above.
-  if (g_pending_wifi_ready) { ws_err(client, "busy, retry in a moment"); return; }
-  // Single-producer handoff: copy into the buffers, THEN set ready last.
-  strncpy(g_pending_wifi_ssid, ssid, sizeof(g_pending_wifi_ssid) - 1);
-  g_pending_wifi_ssid[sizeof(g_pending_wifi_ssid) - 1] = '\0';
-  strncpy(g_pending_wifi_pass, pw, sizeof(g_pending_wifi_pass) - 1);
-  g_pending_wifi_pass[sizeof(g_pending_wifi_pass) - 1] = '\0';
-  g_pending_wifi_ready = true;
-  ws_ack(client, slen ? "stored; joining now" : "home WiFi disabled");
-}
-
-// Handle {"cmd":"wifiscan"} — stash a request for the main loop to start an
-// async nearby-network scan. Unlike the other setters above, this is NOT
-// gated on car_write_safe(): it only kicks off a passive radio scan
-// (WiFi.scanNetworks), never an NVS write or a CAN TX, so there's nothing
-// here that needs the parked-interlock — the scan result isn't even trusted
-// or persisted until the user separately hits Save (handle_cmd_setwifi,
-// which IS gated).
-static void handle_cmd_wifiscan(AsyncWebSocketClient *client) {
-  g_pending_wifi_scan = true;  // drained by webui_housekeeping() on the loop task
-  ws_ack(client, "scanning");
-}
-
 // Parse an incoming WS text frame and dispatch to the right cmd handler.
 // Runs in the AsyncTCP task — no handler here may touch canbus_send(), NVS,
 // or ESP.restart() directly; each defers to the main loop via pending state.
@@ -290,8 +236,6 @@ static void handle_ws_command(AsyncWebSocketClient *client, const uint8_t *data,
   else if (!strcmp(cmd, "setprofile")) handle_cmd_setprofile(client, doc);
   else if (!strcmp(cmd, "setappw"))    handle_cmd_setappw(client, doc);
   else if (!strcmp(cmd, "resethistory")) handle_cmd_resethistory(client);
-  else if (!strcmp(cmd, "setwifi"))    handle_cmd_setwifi(client, doc);
-  else if (!strcmp(cmd, "wifiscan"))   handle_cmd_wifiscan(client);
   else if (!strcmp(cmd, "dtcscan"))     handle_cmd_dtcscan(client);
   else if (!strcmp(cmd, "dtcclear"))    handle_cmd_dtcclear(client, doc);
   else if (!strcmp(cmd, "dtcclearall")) handle_cmd_dtcclearall(client);
@@ -320,10 +264,6 @@ void webui_begin() {
   WiFi.softAPConfig(IPAddress(10, 0, 0, 1), IPAddress(10, 0, 0, 1), IPAddress(255, 255, 255, 0));
   WiFi.setSleep(false);  // modem power-save on soft-AP causes hung/slow responses on some clients
   Serial.printf("[webui] AP 'CANBRIDGE' up, IP: %s\n", WiFi.softAPIP().toString().c_str());
-
-  // Home-WiFi station join (optional, additive): must start AFTER the soft-AP
-  // above so the AP config is never disturbed — see wifi_client.h.
-  wifi_client_begin();
 
   // DNS: answer every query with our own IP so any typed hostname lands on the
   // dashboard. The OS connectivity probes are answered with SUCCESS below (not
@@ -430,7 +370,6 @@ static void build_snapshot(char *buf, size_t buflen) {
     "\"speed_kmh\":%.1f,\"charge_power_kw\":%.2f,\"target_soc_80\":%ld,\"vcm_awake\":%ld,"
     "\"obc_power_kw_ze0\":%.2f,\"ac_voltage_v\":%.1f,\"evse_limit_a\":%.1f,\"qc_voltage_v\":%.1f,\"obc_power_kw_aze0\":%.2f,\"obc_charge_status\":%ld,\"ac_relay\":%ld,\"qc_relay\":%ld,\"t_380_ms\":%lu,\"t_390_ms\":%lu,"
     "\"car_state\":%ld,\"mon_dropped\":%lu,"
-    "\"wifi_ssid\":\"%s\",\"wifi_up\":%d,\"wifi_ip\":\"%s\",\"wifi_status\":\"%s\","
     "\"frames\":[",
     vehicle_name(vehicle_active()), (unsigned long)millis(), (unsigned long)ESP.getFreeHeap(),
     vehicle_name(vehicle_stored()), detected, car_write_safe() ? 1 : 0, can_tx_safe() ? 1 : 0,
@@ -449,8 +388,7 @@ static void build_snapshot(char *buf, size_t buflen) {
     (long)t.ac_relay, (long)t.qc_relay,
     (unsigned long)t.t_380_ms, (unsigned long)t.t_390_ms,
     (long)t.car_state,
-    (unsigned long)(g_frame_mon_dropped[0] + g_frame_mon_dropped[1]),
-    wifi_client_ssid(), wifi_client_up() ? 1 : 0, wifi_client_ip(), wifi_client_status());
+    (unsigned long)(g_frame_mon_dropped[0] + g_frame_mon_dropped[1]));
 
   bool first = true;
   const uint32_t now = millis();
@@ -565,14 +503,6 @@ static void drain_pending_settings() {
     leaf_diag_history_reset();
     g_pending_history_reset = false;
   }
-  if (g_pending_wifi_ready) {
-    wifi_client_store(g_pending_wifi_ssid, g_pending_wifi_pass);
-    g_pending_wifi_ready = false;
-  }
-  if (g_pending_wifi_scan) {
-    wifi_client_scan_start();  // async — see wifi_client.h; not gated on car_write_safe(), see handle_cmd_wifiscan()
-    g_pending_wifi_scan = false;
-  }
 }
 
 // Telemetry push — runs on the Arduino loop task, NOT the CAN-pump task that
@@ -634,15 +564,6 @@ void webui_housekeeping() {
   if (!g_web_started) return;
 
   drain_pending_settings();
-  wifi_client_tick();  // 1 Hz join-status watch; prints transitions to Serial
-  // Scan-result push lives here rather than in webui_broadcast(): the result
-  // becomes ready exactly once, right when wifi_client_tick() (which we just
-  // called, right above) detects scanComplete(), so there's no reason to
-  // hand it off to a different task's poll loop — sending it in the same
-  // pass that noticed it is simplest and avoids a second pending-flag.
-  if (ws.count() != 0 && wifi_client_scan_ready()) {
-    ws.textAll(wifi_client_scan_json());
-  }
 
   if (g_reboot_request_ms && (int32_t)(millis() - g_reboot_request_ms) >= 0) {
     Serial.println("[webui] reboot requested from dashboard");
